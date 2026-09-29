@@ -455,7 +455,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = resultContent.textContent;
         if (!text) return;
         navigator.clipboard.writeText(text).then(() => {
-            triggerCopyFeedback(btnCopyResult, '<i class="fa-regular fa-clone"></i> Copy Caption & Hashtags', 'Copied to Clipboard! ✨');
+            triggerCopyFeedback(btnCopyResult, '<i class="fa-regular fa-clone"></i> <span>Copy All</span>', 'Copied! ✨');
             showToast('📋 Caption & Hashtags copied directly!');
         });
     });

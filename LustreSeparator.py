@@ -575,14 +575,14 @@ class LustreSeparatorApp:
 
         self.btn_copy_output = tk.Button(
             action_bar,
-            text="📋 Copy Caption & Hashtags",
+            text="📋 Copy All",
             font=("Segoe UI", 9, "bold"),
             bg="#0284c7",
             fg="#ffffff",
             activebackground="#0369a1",
             activeforeground="#ffffff",
-            padx=12,
-            pady=9,
+            padx=10,
+            pady=7,
             relief="flat",
             cursor="hand2",
             command=self.copy_output
@@ -944,7 +944,7 @@ class LustreSeparatorApp:
             self.root.clipboard_append(text_to_copy)
             self.btn_copy_output.config(text="✅ Copied to Clipboard!", bg="#059669")
             self.status_bar.config(text="📋 Clean Caption & Hashtags copied to clipboard!")
-            self.root.after(2000, lambda: self.btn_copy_output.config(text="📋 Copy Caption & Hashtags", bg="#0284c7"))
+            self.root.after(2000, lambda: self.btn_copy_output.config(text="📋 Copy All", bg="#0284c7"))
 
     def animate_ticker(self):
         if self.is_processing:
