@@ -216,51 +216,128 @@ class LustreSeparatorApp:
 
     def setup_ui(self):
         # Header banner
-        header = tk.Frame(self.root, bg="#0d1424", padx=24, pady=12, highlightthickness=1, highlightbackground="#1e293b")
+        header = tk.Frame(self.root, bg="#0a0f1d", padx=20, pady=12, highlightthickness=1, highlightbackground="#172238")
         header.pack(fill="x")
 
         # Load Logo in Header
         logo_png = WORKSPACE_DIR / "assets" / "logo.png"
         if logo_png.exists():
             try:
-                pil_img = Image.open(str(logo_png)).resize((44, 44), Image.Resampling.LANCZOS)
+                pil_img = Image.open(str(logo_png)).resize((42, 42), Image.Resampling.LANCZOS)
                 self.logo_img = ImageTk.PhotoImage(pil_img)
-                logo_lbl = tk.Label(header, image=self.logo_img, bg="#0d1424")
-                logo_lbl.pack(side="left", padx=(0, 14))
+                logo_lbl = tk.Label(header, image=self.logo_img, bg="#0a0f1d")
+                logo_lbl.pack(side="left", padx=(0, 12))
             except Exception:
                 pass
 
-        header_text_frame = tk.Frame(header, bg="#0d1424")
+        header_text_frame = tk.Frame(header, bg="#0a0f1d")
         header_text_frame.pack(side="left", fill="both", expand=True)
 
+        # Title Row: Brand + STUDIO PRO interactive hub
+        title_row = tk.Frame(header_text_frame, bg="#0a0f1d")
+        title_row.pack(anchor="w")
+
         title_lbl = tk.Label(
-            header_text_frame,
+            title_row,
             text="✨ LUSTRE SEPARATOR",
-            font=("Segoe UI", 16, "bold"),
+            font=("Segoe UI", 15, "bold"),
             fg="#38bdf8",
-            bg="#0d1424"
+            bg="#0a0f1d"
         )
-        title_lbl.pack(anchor="w")
+        title_lbl.pack(side="left")
+
+        # Studio Pro Hub Button (Hosts API Key & Auto-Updater v2.4.0)
+        self.btn_studio_pro = tk.Button(
+            title_row,
+            text="🟢 STUDIO PRO • v2.4.0 ▾",
+            font=("Segoe UI", 8, "bold"),
+            bg="#0c2340",
+            fg="#38bdf8",
+            activebackground="#133863",
+            activeforeground="#ffffff",
+            padx=10,
+            pady=3,
+            relief="flat",
+            cursor="hand2",
+            command=self.open_studio_pro_dialog
+        )
+        self.btn_studio_pro.pack(side="left", padx=(10, 0))
+        bind_hover(self.btn_studio_pro, "#0c2340", "#133863")
 
         subtitle_lbl = tk.Label(
             header_text_frame,
-            text="Direct Gemini AI Video Analysis  •  Sequential Renamer (1.mp4, 2.mp4...)  •  Pure English Caption & Hashtags",
-            font=("Segoe UI", 9),
+            text="Gemini Vision AI Engine • Sequential Media Renamer • Pure English SEO",
+            font=("Segoe UI", 8),
             fg="#94a3b8",
-            bg="#0d1424"
+            bg="#0a0f1d"
         )
         subtitle_lbl.pack(anchor="w", pady=(2, 0))
 
-        # Top Control Bar (Platform + API Key + Output Folder)
-        ctrl_bar = tk.Frame(self.root, bg="#0f172a", padx=16, pady=10)
+        # Header Right Navigation (Folder links & Web Studio)
+        header_actions = tk.Frame(header, bg="#0a0f1d")
+        header_actions.pack(side="right")
+
+        btn_open_in = tk.Button(
+            header_actions,
+            text="📂 Input",
+            font=("Segoe UI", 8, "bold"),
+            bg="#182234",
+            fg="#cbd5e1",
+            activebackground="#26354f",
+            activeforeground="#ffffff",
+            padx=10,
+            pady=4,
+            relief="flat",
+            cursor="hand2",
+            command=lambda: os.startfile(str(INPUT_DIR))
+        )
+        btn_open_in.pack(side="left", padx=(0, 6))
+        bind_hover(btn_open_in, "#182234", "#26354f")
+
+        btn_open_out = tk.Button(
+            header_actions,
+            text="📁 Output",
+            font=("Segoe UI", 8, "bold"),
+            bg="#182234",
+            fg="#38bdf8",
+            activebackground="#26354f",
+            activeforeground="#ffffff",
+            padx=10,
+            pady=4,
+            relief="flat",
+            cursor="hand2",
+            command=lambda: os.startfile(str(OUTPUT_DIR))
+        )
+        btn_open_out.pack(side="left", padx=(0, 6))
+        bind_hover(btn_open_out, "#182234", "#26354f")
+
+        btn_web_app = tk.Button(
+            header_actions,
+            text="🌐 Web Studio",
+            font=("Segoe UI", 8, "bold"),
+            bg="#0284c7",
+            fg="#ffffff",
+            activebackground="#0369a1",
+            activeforeground="#ffffff",
+            padx=12,
+            pady=4,
+            relief="flat",
+            cursor="hand2",
+            command=self.open_web_app
+        )
+        btn_web_app.pack(side="left")
+        bind_hover(btn_web_app, "#0284c7", "#0ea5e9")
+
+        # Top Control Bar (Platform + Selection Mode + Queue count)
+        ctrl_bar = tk.Frame(self.root, bg="#0c1223", padx=16, pady=8, highlightthickness=1, highlightbackground="#172238")
         ctrl_bar.pack(fill="x")
 
         tk.Label(
             ctrl_bar,
             text="🎯 Target Platform:",
-            font=("Segoe UI", 10, "bold"),
+            font=("Segoe UI", 9, "bold"),
             fg="#e2e8f0",
-            bg="#0f172a"
+            bg="#0c1223"
         ).pack(side="left", padx=(0, 8))
 
         self.platform_var = tk.StringVar(value=self.config.get("target_platform", "facebook"))
@@ -270,147 +347,80 @@ class LustreSeparatorApp:
             values=["facebook", "tiktok", "instagram", "youtube"],
             state="readonly",
             width=14,
-            font=("Segoe UI", 10)
+            font=("Segoe UI", 9)
         )
         platform_combo.pack(side="left", padx=(0, 16))
         platform_combo.bind("<<ComboboxSelected>>", self.on_platform_changed)
 
-        btn_key = tk.Button(
+        tk.Label(
             ctrl_bar,
-            text="🔑 Gemini API Key",
+            text="Mode:",
             font=("Segoe UI", 9, "bold"),
-            bg="#334155",
-            fg="#e2e8f0",
-            activebackground="#475569",
-            activeforeground="#ffffff",
-            padx=12,
-            pady=4,
-            relief="flat",
-            cursor="hand2",
-            command=self.open_key_dialog
-        )
-        btn_key.pack(side="left", padx=(0, 10))
-        bind_hover(btn_key, "#334155", "#475569")
-
-        btn_web_app = tk.Button(
-            ctrl_bar,
-            text="🌐 Open Web App (Studio)",
-            font=("Segoe UI", 9, "bold"),
-            bg="#0284c7",
-            fg="#ffffff",
-            activebackground="#0369a1",
-            activeforeground="#ffffff",
-            padx=14,
-            pady=4,
-            relief="flat",
-            cursor="hand2",
-            command=self.open_web_app
-        )
-        btn_web_app.pack(side="left", padx=(0, 10))
-        bind_hover(btn_web_app, "#0284c7", "#0ea5e9")
-
-        btn_open_out = tk.Button(
-            ctrl_bar,
-            text="📂 Open Output Folder",
-            font=("Segoe UI", 9, "bold"),
-            bg="#1e293b",
-            fg="#38bdf8",
-            activebackground="#334155",
-            activeforeground="#ffffff",
-            padx=12,
-            pady=4,
-            relief="flat",
-            cursor="hand2",
-            command=lambda: os.startfile(str(OUTPUT_DIR))
-        )
-        btn_open_out.pack(side="right")
-        bind_hover(btn_open_out, "#1e293b", "#334155")
-
-        self.btn_check_update = tk.Button(
-            ctrl_bar,
-            text="🔄 Check Updates",
-            font=("Segoe UI", 8),
-            bg="#1e293b",
             fg="#94a3b8",
-            activebackground="#334155",
-            activeforeground="#ffffff",
-            padx=10,
-            pady=4,
-            relief="flat",
-            cursor="hand2",
-            command=self.manual_check_updates
-        )
-        self.btn_check_update.pack(side="right", padx=(0, 8))
-        bind_hover(self.btn_check_update, "#1e293b", "#334155")
-
-        # Main Split Content
-        main_split = tk.PanedWindow(self.root, orient="horizontal", bg="#0f172a", sashwidth=5)
-        main_split.pack(fill="both", expand=True, padx=16, pady=6)
-
-        # LEFT PANE: Input Files & Queue Management
-        left_frame = tk.Frame(main_split, bg="#1e293b", padx=14, pady=14)
-        main_split.add(left_frame, minsize=340)
-
-        input_btn_frame = tk.Frame(left_frame, bg="#1e293b")
-        input_btn_frame.pack(fill="x", pady=(0, 8))
-
-        # Mode selector: Cut (Move) vs Copy
-        mode_frame = tk.Frame(input_btn_frame, bg="#0f172a", padx=8, pady=6, highlightbackground="#334155", highlightthickness=1)
-        mode_frame.pack(fill="x", pady=(0, 8))
-
-        lbl_mode = tk.Label(
-            mode_frame,
-            text="📥 File Selection Mode:",
-            font=("Segoe UI", 8, "bold"),
-            bg="#0f172a",
-            fg="#94a3b8"
-        )
-        lbl_mode.pack(anchor="w")
-
-        radio_row = tk.Frame(mode_frame, bg="#0f172a")
-        radio_row.pack(fill="x", pady=(3, 0))
+            bg="#0c1223"
+        ).pack(side="left", padx=(0, 6))
 
         self.import_mode_var = tk.StringVar(value="cut")
         rb_cut = tk.Radiobutton(
-            radio_row,
-            text="✂️ Cut / Move (Default)",
+            ctrl_bar,
+            text="✂️ Cut / Move",
             variable=self.import_mode_var,
             value="cut",
             font=("Segoe UI", 8, "bold"),
-            bg="#0f172a",
+            bg="#0c1223",
             fg="#38bdf8",
-            selectcolor="#1e293b",
-            activebackground="#0f172a",
+            selectcolor="#172238",
+            activebackground="#0c1223",
             activeforeground="#38bdf8",
             cursor="hand2"
         )
-        rb_cut.pack(side="left", padx=(0, 8))
+        rb_cut.pack(side="left", padx=(0, 6))
 
         rb_copy = tk.Radiobutton(
-            radio_row,
+            ctrl_bar,
             text="📋 Copy",
             variable=self.import_mode_var,
             value="copy",
             font=("Segoe UI", 8),
-            bg="#0f172a",
+            bg="#0c1223",
             fg="#94a3b8",
-            selectcolor="#1e293b",
-            activebackground="#0f172a",
+            selectcolor="#172238",
+            activebackground="#0c1223",
             activeforeground="#f1f5f9",
             cursor="hand2"
         )
-        rb_copy.pack(side="left")
+        rb_copy.pack(side="left", padx=(0, 16))
+
+        self.queue_stat_lbl = tk.Label(
+            ctrl_bar,
+            text="📁 Queue: 0 videos",
+            font=("Segoe UI", 9, "bold"),
+            fg="#38bdf8",
+            bg="#0c1223"
+        )
+        self.queue_stat_lbl.pack(side="right")
+
+        # Main Split Content
+        main_split = tk.PanedWindow(self.root, orient="horizontal", bg="#060913", sashwidth=5)
+        main_split.pack(fill="both", expand=True, padx=14, pady=6)
+
+        # LEFT PANE: Input Media Queue & Drag/Drop
+        left_frame = tk.Frame(main_split, bg="#0c1427", padx=12, pady=12, highlightthickness=1, highlightbackground="#172238")
+        main_split.add(left_frame, minsize=330)
+
+        input_btn_frame = tk.Frame(left_frame, bg="#0c1427")
+        input_btn_frame.pack(fill="x", pady=(0, 6))
 
         btn_add_files = tk.Button(
             input_btn_frame,
-            text="✂️ Select Video Files (Cut & Move)",
+            text="✂️ Add Video Files",
             font=("Segoe UI", 9, "bold"),
             bg="#059669",
             fg="#ffffff",
             activebackground="#047857",
             activeforeground="#ffffff",
             padx=10,
-            pady=6,
+            pady=5,
             relief="flat",
             cursor="hand2",
             command=self.browse_and_add_files
@@ -420,8 +430,8 @@ class LustreSeparatorApp:
 
         btn_add_folder = tk.Button(
             input_btn_frame,
-            text="📁 Select Entire Folder (Cut & Move)",
-            font=("Segoe UI", 9),
+            text="📁 Add Folder",
+            font=("Segoe UI", 8, "bold"),
             bg="#0284c7",
             fg="#ffffff",
             activebackground="#0369a1",
@@ -435,63 +445,35 @@ class LustreSeparatorApp:
         btn_add_folder.pack(fill="x", pady=(0, 6))
         bind_hover(btn_add_folder, "#0284c7", "#0ea5e9")
 
-        input_tools_row = tk.Frame(input_btn_frame, bg="#1e293b")
-        input_tools_row.pack(fill="x")
-
-        btn_open_input_dir = tk.Button(
-            input_tools_row,
-            text="📂 Open input_media",
-            font=("Segoe UI", 8),
-            bg="#334155",
-            fg="#cbd5e1",
-            padx=8,
-            pady=3,
-            relief="flat",
-            cursor="hand2",
-            command=lambda: os.startfile(str(INPUT_DIR))
-        )
-        btn_open_input_dir.pack(side="left")
-
-        btn_refresh = tk.Button(
-            input_tools_row,
-            text="🔄 Refresh List",
-            font=("Segoe UI", 8),
-            bg="#334155",
-            fg="#cbd5e1",
-            padx=8,
-            pady=3,
-            relief="flat",
-            cursor="hand2",
-            command=self.refresh_file_list
-        )
-        btn_refresh.pack(side="right")
-
-        self.list_count_lbl = tk.Label(
-            left_frame,
-            text="📁 Input Videos: 0",
-            font=("Segoe UI", 9, "bold"),
-            fg="#38bdf8",
-            bg="#1e293b"
-        )
-        self.list_count_lbl.pack(anchor="w", pady=(8, 2))
-
+        # Drag & Drop Notice Banner
         drop_banner = tk.Label(
             left_frame,
             text="✨ Drag & Drop Videos / Folders Here ✨",
             font=("Segoe UI", 8, "italic"),
             fg="#38bdf8",
-            bg="#0f172a",
+            bg="#080e1c",
             padx=8,
-            pady=4,
+            pady=5,
             relief="solid",
-            bd=1
+            bd=1,
+            highlightthickness=1,
+            highlightbackground="#1e293b"
         )
-        drop_banner.pack(fill="x", pady=(2, 6))
+        drop_banner.pack(fill="x", pady=(0, 6))
+
+        self.list_count_lbl = tk.Label(
+            left_frame,
+            text="📁 Input Videos: 0",
+            font=("Segoe UI", 8, "bold"),
+            fg="#94a3b8",
+            bg="#0c1427"
+        )
+        self.list_count_lbl.pack(anchor="w", pady=(0, 4))
 
         self.file_listbox = tk.Listbox(
             left_frame,
             font=("Segoe UI", 9),
-            bg="#0f172a",
+            bg="#080e1c",
             fg="#f8fafc",
             selectbackground="#2563eb",
             selectforeground="#ffffff",
@@ -502,34 +484,70 @@ class LustreSeparatorApp:
         self.file_listbox.pack(fill="both", expand=True)
         self.file_listbox.bind("<<ListboxSelect>>", self.on_file_selected)
 
-        # RIGHT PANE: Actions, Logs & Status
-        right_frame = tk.Frame(main_split, bg="#1e293b", padx=16, pady=14)
-        main_split.add(right_frame, minsize=520)
+        # Left bottom tools
+        input_tools_row = tk.Frame(left_frame, bg="#0c1427")
+        input_tools_row.pack(fill="x", pady=(6, 0))
 
+        btn_open_input_dir = tk.Button(
+            input_tools_row,
+            text="📂 Open input_media",
+            font=("Segoe UI", 8),
+            bg="#182234",
+            fg="#cbd5e1",
+            padx=8,
+            pady=3,
+            relief="flat",
+            cursor="hand2",
+            command=lambda: os.startfile(str(INPUT_DIR))
+        )
+        btn_open_input_dir.pack(side="left")
+        bind_hover(btn_open_input_dir, "#182234", "#26354f")
+
+        btn_refresh = tk.Button(
+            input_tools_row,
+            text="🔄 Refresh",
+            font=("Segoe UI", 8),
+            bg="#182234",
+            fg="#cbd5e1",
+            padx=8,
+            pady=3,
+            relief="flat",
+            cursor="hand2",
+            command=self.refresh_file_list
+        )
+        btn_refresh.pack(side="right")
+        bind_hover(btn_refresh, "#182234", "#26354f")
+
+        # RIGHT PANE: Actions, AI Social Media Package & Console Logs
+        right_frame = tk.Frame(main_split, bg="#0c1427", padx=14, pady=12, highlightthickness=1, highlightbackground="#172238")
+        main_split.add(right_frame, minsize=540)
+
+        # Selected video banner
         self.cur_video_lbl = tk.Label(
             right_frame,
-            text="Select a video from the list on the left, or click 'PROCESS & RENAME ALL'",
-            font=("Segoe UI", 11, "bold"),
+            text="Select a video from the left, or click 'PROCESS & RENAME ALL'",
+            font=("Segoe UI", 10, "bold"),
             fg="#f1f5f9",
-            bg="#1e293b",
-            wraplength=500,
+            bg="#0c1427",
+            wraplength=520,
             justify="left"
         )
-        self.cur_video_lbl.pack(anchor="w")
+        self.cur_video_lbl.pack(anchor="w", pady=(0, 8))
 
-        action_bar = tk.Frame(right_frame, bg="#1e293b", pady=10)
-        action_bar.pack(fill="x")
+        # Main Process Actions Bar
+        action_bar = tk.Frame(right_frame, bg="#0c1427")
+        action_bar.pack(fill="x", pady=(0, 10))
 
         self.btn_auto_all = tk.Button(
             action_bar,
-            text="🚀 PROCESS & RENAME ALL (1, 2...)",
+            text="⚡ PROCESS & RENAME ALL (1, 2...)",
             font=("Segoe UI", 10, "bold"),
             bg="#059669",
             fg="#ffffff",
             activebackground="#047857",
             activeforeground="#ffffff",
-            padx=14,
-            pady=9,
+            padx=16,
+            pady=8,
             relief="flat",
             cursor="hand2",
             command=self.start_process_all_videos
@@ -539,14 +557,14 @@ class LustreSeparatorApp:
 
         self.btn_auto_single = tk.Button(
             action_bar,
-            text="⚡ Process Selected",
+            text="▶ Process Selected",
             font=("Segoe UI", 9, "bold"),
             bg="#2563eb",
             fg="#ffffff",
             activebackground="#1d4ed8",
             activeforeground="#ffffff",
             padx=12,
-            pady=9,
+            pady=8,
             relief="flat",
             cursor="hand2",
             state="disabled",
@@ -557,106 +575,151 @@ class LustreSeparatorApp:
 
         self.btn_stop = tk.Button(
             action_bar,
-            text="⏹️ STOP ANALYSIS",
+            text="⏹ STOP",
             font=("Segoe UI", 9, "bold"),
             bg="#475569",
             fg="#ffffff",
             activebackground="#dc2626",
             activeforeground="#ffffff",
             padx=12,
-            pady=9,
+            pady=8,
             relief="flat",
             cursor="hand2",
             state="disabled",
             command=self.request_stop
         )
-        self.btn_stop.pack(side="left", padx=(0, 8))
+        self.btn_stop.pack(side="left")
         bind_hover(self.btn_stop, "#475569", "#dc2626")
 
-        self.btn_copy_output = tk.Button(
-            action_bar,
-            text="📋 Copy All",
+        # Showcase Card: AI Social Media Package (Pure Story Caption & Hashtags)
+        showcase_card = tk.Frame(right_frame, bg="#0f172a", padx=12, pady=10, highlightthickness=1, highlightbackground="#1e293b")
+        showcase_card.pack(fill="both", expand=True, pady=(0, 8))
+
+        showcase_header = tk.Frame(showcase_card, bg="#0f172a")
+        showcase_header.pack(fill="x", pady=(0, 6))
+
+        tk.Label(
+            showcase_header,
+            text="✨ AI Social Media Package (Story Caption & Hashtags):",
             font=("Segoe UI", 9, "bold"),
+            fg="#38bdf8",
+            bg="#0f172a"
+        ).pack(side="left")
+
+        self.lbl_caption_stats = tk.Label(
+            showcase_header,
+            text="0 chars • 0 words • 0 tags",
+            font=("Segoe UI", 8),
+            fg="#94a3b8",
+            bg="#0f172a"
+        )
+        self.lbl_caption_stats.pack(side="left", padx=(8, 0))
+
+        # Compact action buttons (Clear & Copy All)
+        self.btn_copy_output = tk.Button(
+            showcase_header,
+            text="📋 Copy All",
+            font=("Segoe UI", 8, "bold"),
             bg="#0284c7",
             fg="#ffffff",
             activebackground="#0369a1",
             activeforeground="#ffffff",
             padx=10,
-            pady=7,
+            pady=3,
             relief="flat",
             cursor="hand2",
             command=self.copy_output
         )
-        self.btn_copy_output.pack(side="left", padx=(0, 8))
+        self.btn_copy_output.pack(side="right")
         bind_hover(self.btn_copy_output, "#0284c7", "#0ea5e9")
 
-        self.btn_clear_log = tk.Button(
-            action_bar,
-            text="🧹 Clear Logs",
-            font=("Segoe UI", 9),
-            bg="#334155",
-            fg="#cbd5e1",
-            activebackground="#475569",
+        self.btn_clear_caption = tk.Button(
+            showcase_header,
+            text="🧹 Clear",
+            font=("Segoe UI", 8),
+            bg="#27272a",
+            fg="#f87171",
+            activebackground="#ef4444",
             activeforeground="#ffffff",
-            padx=10,
-            pady=9,
+            padx=8,
+            pady=3,
             relief="flat",
             cursor="hand2",
-            command=self.clear_log
+            command=self.clear_caption
         )
-        self.btn_clear_log.pack(side="left")
-        bind_hover(self.btn_clear_log, "#334155", "#475569")
+        self.btn_clear_caption.pack(side="right", padx=(0, 6))
+        bind_hover(self.btn_clear_caption, "#27272a", "#3f3f46")
 
-        log_header_frame = tk.Frame(right_frame, bg="#1e293b")
-        log_header_frame.pack(fill="x", pady=(8, 4))
+        self.txt_caption = scrolledtext.ScrolledText(
+            showcase_card,
+            font=("Segoe UI", 10),
+            bg="#090d16",
+            fg="#f1f5f9",
+            insertbackground="#38bdf8",
+            relief="flat",
+            padx=10,
+            pady=8,
+            wrap="word",
+            height=9
+        )
+        self.txt_caption.pack(fill="both", expand=True)
+        self.txt_caption.bind("<KeyRelease>", self.on_caption_edited)
+
+        # Execution Logs Card
+        log_card = tk.Frame(right_frame, bg="#080d19", padx=10, pady=6, highlightthickness=1, highlightbackground="#172238")
+        log_card.pack(fill="x")
+
+        log_top = tk.Frame(log_card, bg="#080d19")
+        log_top.pack(fill="x", pady=(0, 4))
 
         tk.Label(
-            log_header_frame,
-            text="📝 Live Gemini AI Output (Caption & Hashtags):",
-            font=("Segoe UI", 9, "bold"),
+            log_top,
+            text="📟 Execution Console Logs:",
+            font=("Segoe UI", 8, "bold"),
             fg="#94a3b8",
-            bg="#1e293b"
+            bg="#080d19"
         ).pack(side="left")
 
-        btn_header_clear = tk.Button(
-            log_header_frame,
-            text="🧹 Clear",
-            font=("Segoe UI", 8, "bold"),
-            bg="#1e293b",
-            fg="#38bdf8",
-            activebackground="#334155",
+        self.btn_clear_log = tk.Button(
+            log_top,
+            text="🧹 Clear Log",
+            font=("Segoe UI", 8),
+            bg="#182234",
+            fg="#94a3b8",
+            activebackground="#26354f",
             activeforeground="#ffffff",
-            padx=10,
-            pady=2,
+            padx=8,
+            pady=1,
             relief="flat",
             cursor="hand2",
             command=self.clear_log
         )
-        btn_header_clear.pack(side="right")
+        self.btn_clear_log.pack(side="right")
+        bind_hover(self.btn_clear_log, "#182234", "#26354f")
 
-        self.txt_output = scrolledtext.ScrolledText(
-            right_frame,
-            font=("Consolas", 10),
-            bg="#0f172a",
-            fg="#f8fafc",
+        self.txt_log = scrolledtext.ScrolledText(
+            log_card,
+            font=("Consolas", 9),
+            bg="#04060d",
+            fg="#94a3b8",
             insertbackground="#38bdf8",
-            relief="solid",
-            bd=1,
-            padx=12,
-            pady=10,
-            wrap="word"
+            relief="flat",
+            padx=8,
+            pady=6,
+            wrap="word",
+            height=5
         )
-        self.txt_output.pack(fill="both", expand=True)
+        self.txt_log.pack(fill="both", expand=True)
 
         self.status_bar = tk.Label(
             self.root,
             text="Ready. Click 'PROCESS & RENAME ALL' to start direct Gemini AI video analysis.",
             font=("Segoe UI", 9),
             fg="#94a3b8",
-            bg="#0f172a",
+            bg="#0a0f1d",
             anchor="w",
-            padx=24,
-            pady=8
+            padx=20,
+            pady=6
         )
         self.status_bar.pack(fill="x")
 
@@ -684,61 +747,213 @@ class LustreSeparatorApp:
                 webbrowser.open(server_url)
 
     def open_key_dialog(self):
+        self.open_studio_pro_dialog()
+
+    def open_studio_pro_dialog(self):
         win = tk.Toplevel(self.root)
-        win.title("Gemini API Key Setup")
-        win.geometry("540x220")
-        win.configure(bg="#1e293b")
+        win.title("✨ STUDIO PRO Center - API Key & Updates")
+        win.geometry("560x440")
+        win.configure(bg="#0c1223")
         win.transient(self.root)
         win.grab_set()
 
+        # Modal Header
+        top_frame = tk.Frame(win, bg="#0f172a", padx=20, pady=14, highlightthickness=1, highlightbackground="#1e293b")
+        top_frame.pack(fill="x")
+
         tk.Label(
-            win,
-            text="🔑 Google Gemini API Key:",
-            font=("Segoe UI", 11, "bold"),
+            top_frame,
+            text="✨ STUDIO PRO SUITE",
+            font=("Segoe UI", 13, "bold"),
             fg="#38bdf8",
-            bg="#1e293b"
-        ).pack(anchor="w", padx=20, pady=(18, 6))
+            bg="#0f172a"
+        ).pack(anchor="w")
+
+        local_ver = auto_updater.get_local_version() if AUTO_UPDATER_AVAILABLE else {"version": "2.4.0"}
+        cur_v = local_ver.get("version", "2.4.0")
+
+        self.dlg_ver_lbl = tk.Label(
+            top_frame,
+            text=f"Version {cur_v} (Stable)  •  Gemini Vision Engine  •  Git Auto-Updater",
+            font=("Segoe UI", 9),
+            fg="#94a3b8",
+            bg="#0f172a"
+        )
+        self.dlg_ver_lbl.pack(anchor="w", pady=(2, 0))
+
+        content_box = tk.Frame(win, bg="#0c1223", padx=20, pady=14)
+        content_box.pack(fill="both", expand=True)
+
+        # CARD 1: Gemini API Key
+        key_card = tk.Frame(content_box, bg="#111827", padx=14, pady=12, highlightthickness=1, highlightbackground="#1f293d")
+        key_card.pack(fill="x", pady=(0, 12))
+
+        tk.Label(
+            key_card,
+            text="🔑 Google Gemini API Key:",
+            font=("Segoe UI", 10, "bold"),
+            fg="#ffffff",
+            bg="#111827"
+        ).pack(anchor="w", pady=(0, 4))
+
+        key_row = tk.Frame(key_card, bg="#111827")
+        key_row.pack(fill="x", pady=(0, 6))
 
         key_entry = tk.Entry(
-            win,
-            font=("Segoe UI", 10),
-            bg="#0f172a",
+            key_row,
+            font=("Segoe UI", 9),
+            bg="#080d1a",
             fg="#ffffff",
             insertbackground="#38bdf8",
             relief="solid",
             bd=1
         )
         key_entry.insert(0, self.config.get("gemini_api_key", ""))
-        key_entry.pack(fill="x", padx=20, pady=4)
+        key_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
 
-        tk.Label(
-            win,
-            text="Get your free key at: https://aistudio.google.com/app/apikey",
-            font=("Segoe UI", 8),
-            fg="#94a3b8",
-            bg="#1e293b"
-        ).pack(anchor="w", padx=20, pady=(2, 18))
-
-        def save_k():
-            new_k = key_entry.get().strip()
-            self.config["gemini_api_key"] = new_k
+        def _save_key():
+            k = key_entry.get().strip()
+            self.config["gemini_api_key"] = k
             save_config(self.config)
-            messagebox.showinfo("Saved", "✅ Gemini API Key successfully saved!", parent=win)
-            win.destroy()
+            messagebox.showinfo("Saved", "✅ Gemini API Key saved successfully!", parent=win)
 
-        tk.Button(
-            win,
-            text="Save Key",
-            font=("Segoe UI", 10, "bold"),
+        btn_save = tk.Button(
+            key_row,
+            text="💾 Save Key",
+            font=("Segoe UI", 8, "bold"),
             bg="#059669",
             fg="#ffffff",
             activebackground="#047857",
-            padx=18,
-            pady=6,
+            activeforeground="#ffffff",
+            padx=10,
+            pady=3,
             relief="flat",
             cursor="hand2",
-            command=save_k
-        ).pack(anchor="e", padx=20)
+            command=_save_key
+        )
+        btn_save.pack(side="right")
+        bind_hover(btn_save, "#059669", "#10b981")
+
+        tk.Label(
+            key_card,
+            text="Get a free key from Google: https://aistudio.google.com/app/apikey",
+            font=("Segoe UI", 8),
+            fg="#64748b",
+            bg="#111827"
+        ).pack(anchor="w")
+
+        # CARD 2: Auto-Updater
+        up_card = tk.Frame(content_box, bg="#111827", padx=14, pady=12, highlightthickness=1, highlightbackground="#1f293d")
+        up_card.pack(fill="x")
+
+        up_title_row = tk.Frame(up_card, bg="#111827")
+        up_title_row.pack(fill="x", pady=(0, 4))
+
+        tk.Label(
+            up_title_row,
+            text="🚀 Automatic Application Updates (Git Pull):",
+            font=("Segoe UI", 10, "bold"),
+            fg="#ffffff",
+            bg="#111827"
+        ).pack(side="left")
+
+        git_info = auto_updater.get_git_info() if AUTO_UPDATER_AVAILABLE else {}
+        branch_name = git_info.get("branch", "main")
+        commit_hash = git_info.get("commit", "")[:7]
+
+        status_txt = f"Installed Build: v{cur_v}"
+        if commit_hash and commit_hash != "none":
+            status_txt += f" ({branch_name}@{commit_hash})"
+
+        lbl_up_status = tk.Label(
+            up_card,
+            text=status_txt,
+            font=("Segoe UI", 8),
+            fg="#94a3b8",
+            bg="#111827"
+        )
+        lbl_up_status.pack(anchor="w", pady=(0, 8))
+
+        up_btns = tk.Frame(up_card, bg="#111827")
+        up_btns.pack(fill="x")
+
+        def _check_and_refresh():
+            lbl_up_status.config(text="🔍 Checking remote Git origin for new commits...", fg="#38bdf8")
+            win.update_idletasks()
+            res = auto_updater.check_for_updates() if AUTO_UPDATER_AVAILABLE else {}
+            if res.get("update_available"):
+                c = res.get("behind_count", 1)
+                lbl_up_status.config(text=f"🚀 {c} new update(s) available to pull!", fg="#fbbf24")
+                btn_up_now.config(state="normal", text=f"🚀 Update Now ({c} commits)", bg="#059669")
+                self.btn_studio_pro.config(text=f"🚀 STUDIO PRO • Update ({c}) ▾", bg="#b45309", fg="#ffffff")
+            else:
+                lbl_up_status.config(text=f"✅ {res.get('message', 'Application is completely up to date.')}", fg="#10b981")
+                btn_up_now.config(state="disabled", text="🚀 Up to date", bg="#334155")
+                self.btn_studio_pro.config(text=f"🟢 STUDIO PRO • v{cur_v} ▾", bg="#0c2340", fg="#38bdf8")
+
+        def _do_update():
+            if messagebox.askyesno("Confirm Update", "Do you want to run Git Pull now?\nYour config.json (API Key) and media folders will be safely preserved.", parent=win):
+                lbl_up_status.config(text="⏳ Pulling updates from Git...", fg="#38bdf8")
+                win.update_idletasks()
+                res = auto_updater.perform_update() if AUTO_UPDATER_AVAILABLE else {"ok": False, "error": "Updater unavailable"}
+                if res.get("ok"):
+                    messagebox.showinfo("Update Complete", f"🎉 {res.get('message')}\n\nPlease close and reopen Lustre Separator to apply all changes!", parent=win)
+                    win.destroy()
+                else:
+                    messagebox.showerror("Update Failed", f"Update error: {res.get('error')}", parent=win)
+
+        btn_chk = tk.Button(
+            up_btns,
+            text="🔄 Check for Updates",
+            font=("Segoe UI", 8, "bold"),
+            bg="#1e293b",
+            fg="#38bdf8",
+            activebackground="#334155",
+            activeforeground="#ffffff",
+            padx=12,
+            pady=5,
+            relief="flat",
+            cursor="hand2",
+            command=_check_and_refresh
+        )
+        btn_chk.pack(side="left", padx=(0, 8))
+        bind_hover(btn_chk, "#1e293b", "#334155")
+
+        btn_up_now = tk.Button(
+            up_btns,
+            text="🚀 Update Now (Git Pull)",
+            font=("Segoe UI", 8, "bold"),
+            bg="#334155",
+            fg="#ffffff",
+            activebackground="#047857",
+            activeforeground="#ffffff",
+            padx=14,
+            pady=5,
+            relief="flat",
+            cursor="hand2",
+            state="disabled",
+            command=_do_update
+        )
+        btn_up_now.pack(side="left")
+        bind_hover(btn_up_now, "#334155", "#059669")
+
+        # Bottom Close button
+        btn_close = tk.Button(
+            win,
+            text="Close",
+            font=("Segoe UI", 8),
+            bg="#182234",
+            fg="#94a3b8",
+            activebackground="#26354f",
+            activeforeground="#ffffff",
+            padx=16,
+            pady=4,
+            relief="flat",
+            cursor="hand2",
+            command=win.destroy
+        )
+        btn_close.pack(side="bottom", pady=(0, 14))
+        bind_hover(btn_close, "#182234", "#26354f")
 
     def browse_and_add_files(self):
         is_cut = (self.import_mode_var.get() == "cut")
@@ -907,6 +1122,8 @@ class LustreSeparatorApp:
 
         count = len(self.files_list)
         self.list_count_lbl.config(text=f"📁 Input Videos: {count}")
+        if hasattr(self, 'queue_stat_lbl'):
+            self.queue_stat_lbl.config(text=f"📁 Queue: {count} videos")
 
         if count > 0 and not self.is_processing:
             self.file_listbox.selection_set(0)
@@ -931,18 +1148,41 @@ class LustreSeparatorApp:
         self.msg_queue.put(("log", text))
 
     def clear_log(self):
-        self.txt_output.delete("1.0", tk.END)
+        if hasattr(self, 'txt_log'):
+            self.txt_log.delete("1.0", tk.END)
+        self.status_bar.config(text="🧹 Execution logs cleared!")
+
+    def clear_caption(self):
+        if hasattr(self, 'txt_caption'):
+            self.txt_caption.delete("1.0", tk.END)
         self.latest_caption_text = ""
-        self.status_bar.config(text="🧹 Live caption output and logs cleared!")
+        if hasattr(self, 'lbl_caption_stats'):
+            self.lbl_caption_stats.config(text="0 chars • 0 words • 0 tags")
+        self.status_bar.config(text="🧹 Caption & hashtags cleared!")
+
+    def update_caption_stats(self, text):
+        if hasattr(self, 'lbl_caption_stats'):
+            cleaned = text.strip() if text else ""
+            chars = len(cleaned)
+            words = len(cleaned.split()) if cleaned else 0
+            tags = len(re.findall(r'#[\w\u0080-\uFFFF]+', cleaned))
+            self.lbl_caption_stats.config(text=f"{chars} chars • {words} words • {tags} tags")
+
+    def on_caption_edited(self, event=None):
+        if hasattr(self, 'txt_caption'):
+            t = self.txt_caption.get("1.0", tk.END).strip()
+            self.update_caption_stats(t)
 
     def copy_output(self):
-        text_to_copy = getattr(self, 'latest_caption_text', '')
+        text_to_copy = ""
+        if hasattr(self, 'txt_caption'):
+            text_to_copy = self.txt_caption.get("1.0", tk.END).strip()
         if not text_to_copy:
-            text_to_copy = self.txt_output.get("1.0", tk.END).strip()
+            text_to_copy = getattr(self, 'latest_caption_text', '')
         if text_to_copy:
             self.root.clipboard_clear()
             self.root.clipboard_append(text_to_copy)
-            self.btn_copy_output.config(text="✅ Copied to Clipboard!", bg="#059669")
+            self.btn_copy_output.config(text="✅ Copied!", bg="#059669")
             self.status_bar.config(text="📋 Clean Caption & Hashtags copied to clipboard!")
             self.root.after(2000, lambda: self.btn_copy_output.config(text="📋 Copy All", bg="#0284c7"))
 
@@ -970,21 +1210,26 @@ class LustreSeparatorApp:
             while True:
                 msg_type, data = self.msg_queue.get_nowait()
                 if msg_type == "log":
-                    self.txt_output.insert(tk.END, data + "\n")
-                    self.txt_output.see(tk.END)
+                    if hasattr(self, 'txt_log'):
+                        self.txt_log.insert(tk.END, data + "\n")
+                        self.txt_log.see(tk.END)
                 elif msg_type == "status":
                     self.status_bar.config(text=data)
                 elif msg_type == "latest_result":
                     self.latest_caption_text = data
+                    if hasattr(self, 'txt_caption'):
+                        self.txt_caption.delete("1.0", tk.END)
+                        self.txt_caption.insert("1.0", data)
+                    self.update_caption_stats(data)
                 elif msg_type == "update_available":
                     count = data.get("behind_count", 1)
-                    self.status_bar.config(text=f"🚀 {count} new update(s) available from Git! Click 'Check Updates' to install.")
-                    if hasattr(self, 'btn_check_update'):
-                        self.btn_check_update.config(text=f"🚀 Update ({count})", bg="#0284c7", fg="#ffffff")
+                    self.status_bar.config(text=f"🚀 {count} new update(s) available! Click 'STUDIO PRO' to install.")
+                    if hasattr(self, 'btn_studio_pro'):
+                        self.btn_studio_pro.config(text=f"🚀 STUDIO PRO • Update ({count}) ▾", bg="#b45309", fg="#ffffff")
                 elif msg_type == "finished":
                     self.is_processing = False
                     self.stop_requested = False
-                    self.btn_stop.config(state="disabled", text="⏹️ STOP ANALYSIS", bg="#475569")
+                    self.btn_stop.config(state="disabled", text="⏹ STOP", bg="#475569")
                     self.refresh_file_list()
                     messagebox.showinfo("Status", data)
         except queue.Empty:
