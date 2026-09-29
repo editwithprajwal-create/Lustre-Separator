@@ -202,6 +202,7 @@ class LustreSeparatorApp:
         self.msg_queue = queue.Queue()
         self.logo_img = None
 
+        self.done_count = 0
         self.setup_ui()
         if WINDND_AVAILABLE:
             try:
@@ -213,6 +214,18 @@ class LustreSeparatorApp:
         self.animate_ticker()
         if AUTO_UPDATER_AVAILABLE:
             threading.Thread(target=self.background_update_check, daemon=True).start()
+        threading.Thread(target=self.ensure_local_server, daemon=True).start()
+
+    def ensure_local_server(self):
+        import urllib.request
+        try:
+            urllib.request.urlopen("http://localhost:5050/api/status", timeout=0.8)
+        except Exception:
+            try:
+                import web_server
+                threading.Thread(target=lambda: web_server.run_server(port=5050, open_browser=False), daemon=True).start()
+            except Exception:
+                pass
 
     def setup_ui(self):
         # Header banner
@@ -273,9 +286,21 @@ class LustreSeparatorApp:
         )
         subtitle_lbl.pack(anchor="w", pady=(2, 0))
 
-        # Header Right Navigation (Folder links & Web Studio)
+        # Header Right Navigation (Live Engine + Folder links + Web Studio)
         header_actions = tk.Frame(header, bg="#0a0f1d")
         header_actions.pack(side="right")
+
+        engine_pill = tk.Label(
+            header_actions,
+            text="🟢 Gemini Vision: ONLINE",
+            font=("Segoe UI", 8, "bold"),
+            fg="#10b981",
+            bg="#0f172a",
+            padx=9,
+            pady=4,
+            relief="flat"
+        )
+        engine_pill.pack(side="left", padx=(0, 8))
 
         btn_open_in = tk.Button(
             header_actions,
@@ -328,37 +353,60 @@ class LustreSeparatorApp:
         btn_web_app.pack(side="left")
         bind_hover(btn_web_app, "#0284c7", "#0ea5e9")
 
-        # Top Control Bar (Platform + Selection Mode + Queue count)
+        # Top Control Bar (Target Destination Platform Chips + Mode + Queue & Done Counters)
         ctrl_bar = tk.Frame(self.root, bg="#0c1223", padx=16, pady=8, highlightthickness=1, highlightbackground="#172238")
         ctrl_bar.pack(fill="x")
 
         tk.Label(
             ctrl_bar,
-            text="🎯 Target Platform:",
-            font=("Segoe UI", 9, "bold"),
+            text="🎯 Destination:",
+            font=("Segoe UI", 8, "bold"),
             fg="#e2e8f0",
             bg="#0c1223"
-        ).pack(side="left", padx=(0, 8))
+        ).pack(side="left", padx=(0, 6))
 
         self.platform_var = tk.StringVar(value=self.config.get("target_platform", "facebook"))
-        platform_combo = ttk.Combobox(
-            ctrl_bar,
-            textvariable=self.platform_var,
-            values=["facebook", "tiktok", "instagram", "youtube"],
-            state="readonly",
-            width=14,
-            font=("Segoe UI", 9)
-        )
-        platform_combo.pack(side="left", padx=(0, 16))
-        platform_combo.bind("<<ComboboxSelected>>", self.on_platform_changed)
+        self.platform_buttons = {}
+
+        platforms = [
+            ("facebook", "Facebook"),
+            ("instagram", "Instagram Reels"),
+            ("tiktok", "TikTok"),
+            ("youtube", "YouTube Shorts")
+        ]
+
+        def select_platform(p_key):
+            self.platform_var.set(p_key)
+            self.on_platform_changed()
+            self._update_platform_buttons()
+
+        for p_key, p_label in platforms:
+            btn_p = tk.Button(
+                ctrl_bar,
+                text=p_label,
+                font=("Segoe UI", 8, "bold"),
+                bg="#172238",
+                fg="#94a3b8",
+                activebackground="#0284c7",
+                activeforeground="#ffffff",
+                padx=8,
+                pady=2,
+                relief="flat",
+                cursor="hand2",
+                command=lambda k=p_key: select_platform(k)
+            )
+            btn_p.pack(side="left", padx=(0, 4))
+            self.platform_buttons[p_key] = btn_p
+
+        self._update_platform_buttons()
 
         tk.Label(
             ctrl_bar,
-            text="Mode:",
-            font=("Segoe UI", 9, "bold"),
-            fg="#94a3b8",
+            text="•  Mode:",
+            font=("Segoe UI", 8, "bold"),
+            fg="#64748b",
             bg="#0c1223"
-        ).pack(side="left", padx=(0, 6))
+        ).pack(side="left", padx=(8, 4))
 
         self.import_mode_var = tk.StringVar(value="cut")
         rb_cut = tk.Radiobutton(
@@ -374,7 +422,7 @@ class LustreSeparatorApp:
             activeforeground="#38bdf8",
             cursor="hand2"
         )
-        rb_cut.pack(side="left", padx=(0, 6))
+        rb_cut.pack(side="left", padx=(0, 4))
 
         rb_copy = tk.Radiobutton(
             ctrl_bar,
@@ -389,12 +437,12 @@ class LustreSeparatorApp:
             activeforeground="#f1f5f9",
             cursor="hand2"
         )
-        rb_copy.pack(side="left", padx=(0, 16))
+        rb_copy.pack(side="left", padx=(0, 10))
 
         self.queue_stat_lbl = tk.Label(
             ctrl_bar,
-            text="📁 Queue: 0 videos",
-            font=("Segoe UI", 9, "bold"),
+            text="Queue: 0  •  Done: 0",
+            font=("Segoe UI", 8, "bold"),
             fg="#38bdf8",
             bg="#0c1223"
         )
@@ -723,9 +771,20 @@ class LustreSeparatorApp:
         )
         self.status_bar.pack(fill="x")
 
+    def _update_platform_buttons(self):
+        cur = self.platform_var.get()
+        for p_key, btn in getattr(self, 'platform_buttons', {}).items():
+            if p_key == cur:
+                btn.config(bg="#0284c7", fg="#ffffff")
+                bind_hover(btn, "#0284c7", "#0ea5e9")
+            else:
+                btn.config(bg="#172238", fg="#94a3b8")
+                bind_hover(btn, "#172238", "#26354f")
+
     def on_platform_changed(self, event=None):
         self.config["target_platform"] = self.platform_var.get()
         save_config(self.config)
+        self._update_platform_buttons()
         self.status_bar.config(text=f"Target Platform updated: {self.platform_var.get().upper()}")
 
     def open_web_app(self):
@@ -1226,6 +1285,9 @@ class LustreSeparatorApp:
                     self.status_bar.config(text=f"🚀 {count} new update(s) available! Click 'STUDIO PRO' to install.")
                     if hasattr(self, 'btn_studio_pro'):
                         self.btn_studio_pro.config(text=f"🚀 STUDIO PRO • Update ({count}) ▾", bg="#b45309", fg="#ffffff")
+                elif msg_type == "done_count":
+                    if hasattr(self, 'queue_stat_lbl'):
+                        self.queue_stat_lbl.config(text=f"Queue: {len(self.files_list)}  •  Done: {data}")
                 elif msg_type == "finished":
                     self.is_processing = False
                     self.stop_requested = False
@@ -1475,6 +1537,8 @@ CRITICAL RULES:
                 self.msg_queue.put(("latest_result", ai_output.strip()))
                 self.log(f"   ✂️  CUT & RENAMED ➔ {target_folder.name}/{renamed_filename}")
                 self.log(f"   📝 Pure English .txt Saved: {txt_path.name}")
+                self.done_count += 1
+                self.msg_queue.put(("done_count", self.done_count))
 
             self.msg_queue.put(("finished", f"🎉 Success! All {total_files} videos have been analyzed by Gemini AI and organized with English Caption and Hashtags!"))
         except Exception as exc:
