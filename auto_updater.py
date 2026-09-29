@@ -18,7 +18,7 @@ CONFIG_FILE = WORKSPACE_DIR / "config.json"
 VERSION_FILE = WORKSPACE_DIR / "version.json"
 
 DEFAULT_VERSION_DATA = {
-    "version": "2.4.0",
+    "version": "2.5.0",
     "app_name": "Lustre Separator",
     "release_date": "2026-09-29",
     "channel": "stable"
@@ -105,7 +105,7 @@ def check_for_updates():
         return {
             "ok": False,
             "update_available": False,
-            "current_version": ver.get("version", "2.4.0"),
+            "current_version": ver.get("version", "2.5.0"),
             "error": "Git is not installed or not in PATH."
         }
 
@@ -114,7 +114,7 @@ def check_for_updates():
             "ok": True,
             "is_git": False,
             "update_available": False,
-            "current_version": ver.get("version", "2.4.0"),
+            "current_version": ver.get("version", "2.5.0"),
             "message": "Local folder is not initialized with Git. Set a Remote URL to enable auto-updates."
         }
 
@@ -125,7 +125,7 @@ def check_for_updates():
             "ok": True,
             "is_git": True,
             "update_available": False,
-            "current_version": ver.get("version", "2.4.0"),
+            "current_version": ver.get("version", "2.5.0"),
             "message": "Git is initialized, but no Remote Origin URL is set."
         }
 
@@ -140,7 +140,7 @@ def check_for_updates():
                 "ok": False,
                 "is_git": True,
                 "update_available": False,
-                "current_version": ver.get("version", "2.4.0"),
+                "current_version": ver.get("version", "2.5.0"),
                 "error": f"Failed to fetch from remote: {fetch_res.stderr.strip()}"
             }
 
@@ -173,7 +173,7 @@ def check_for_updates():
             "is_git": True,
             "update_available": behind_count > 0,
             "behind_count": behind_count,
-            "current_version": ver.get("version", "2.4.0"),
+            "current_version": ver.get("version", "2.5.0"),
             "current_commit": git_info.get("commit"),
             "branch": branch,
             "remote_url": remote_url,
@@ -185,7 +185,7 @@ def check_for_updates():
             "ok": False,
             "is_git": True,
             "update_available": False,
-            "current_version": ver.get("version", "2.4.0"),
+            "current_version": ver.get("version", "2.5.0"),
             "error": str(exc)
         }
 

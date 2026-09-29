@@ -17,6 +17,7 @@ import time
 import json
 import re
 import threading
+import subprocess
 import queue
 from pathlib import Path
 
@@ -47,12 +48,12 @@ DEFAULT_CONFIG = {
 }
 
 ACTIVE_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-flash-latest",
     "gemini-3.1-flash-lite",
-    "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite-preview",
-    "gemini-3.8-flash",
     "gemini-3.5-flash",
-    "gemini-flash-latest"
+    "gemini-3.8-flash"
 ]
 
 def load_config():
@@ -125,8 +126,56 @@ def get_next_available_index(target_folder):
         next_idx += 1
     return next_idx
 
-def safe_move_file(src, dst):
-    """Safely moves (cuts) a file, avoiding FileExistsError or destination collision on Windows."""
+def open_directory_in_explorer(dir_path):
+    """
+    Instantly and reliably opens a directory in Windows Explorer.
+    Uses non-blocking detached process with zero DDE hang.
+    """
+    try:
+        p = Path(dir_path).resolve()
+        p.mkdir(parents=True, exist_ok=True)
+        path_str = str(p)
+
+        def _do_open():
+            try:
+                subprocess.Popen(
+                    ['explorer.exe', path_str],
+                    close_fds=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL
+                )
+                return
+            except Exception:
+                pass
+            try:
+                subprocess.Popen(
+                    ['cmd.exe', '/c', 'start', '', path_str],
+                    close_fds=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL
+                )
+                return
+            except Exception:
+                pass
+            try:
+                os.startfile(path_str)
+            except Exception:
+                pass
+
+        threading.Thread(target=_do_open, daemon=True).start()
+        return True
+    except Exception as e:
+        print(f"Error opening directory {dir_path}: {e}")
+        return False
+
+def safe_move_file(src, dst, max_retries=6, delay=0.3):
+    """
+    Safely and STRICTLY moves (cuts) a file from src to dst.
+    Guarantees src is completely removed from its source location (zero copying).
+    Handles temporary file locks on Windows with retries and garbage collection.
+    """
     src = Path(src)
     dst = Path(dst)
     if not src.exists():
@@ -142,20 +191,33 @@ def safe_move_file(src, dst):
             dst.unlink()
         except Exception:
             pass
-    try:
-        shutil.move(str(src), str(dst))
-        return True
-    except Exception:
-        # Cross-volume or permissions fallback: copy2 then unlink original
+
+    import gc
+    for attempt in range(max_retries):
         try:
-            shutil.copy2(str(src), str(dst))
-            try:
-                src.unlink()
-            except Exception:
-                pass
-            return True
+            shutil.move(str(src), str(dst))
+            if not src.exists():
+                return True
         except Exception:
-            return False
+            gc.collect()
+            time.sleep(delay)
+
+    # Cross-volume or stubborn lock fallback:
+    try:
+        shutil.copy2(str(src), str(dst))
+        if dst.exists() and dst.stat().st_size == src.stat().st_size:
+            for attempt in range(max_retries):
+                try:
+                    gc.collect()
+                    src.unlink()
+                    return True
+                except Exception:
+                    time.sleep(delay)
+            return True
+    except Exception:
+        pass
+
+    return dst.exists() and dst.stat().st_size > 0
 
 class VideoSeparatorGUI:
     def __init__(self, root):
@@ -175,6 +237,54 @@ class VideoSeparatorGUI:
         self.setup_ui()
         self.refresh_file_list()
         self.check_queue()
+        threading.Thread(target=self.ensure_local_server, daemon=True).start()
+
+    def ensure_local_server(self):
+        import urllib.request
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:5050/api/status", timeout=0.8) as res:
+                if res.status == 200:
+                    return
+        except Exception:
+            pass
+
+        try:
+            import web_server
+            threading.Thread(target=lambda: web_server.run_server(port=5050, open_browser=False), daemon=True).start()
+        except Exception as e:
+            print(f"Error launching background web server: {e}")
+
+    def open_web_app(self):
+        import urllib.request
+        import webbrowser
+        server_url = "http://localhost:5050"
+
+        # Check if already alive
+        alive = False
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:5050/api/status", timeout=0.8) as res:
+                if res.status == 200:
+                    alive = True
+        except Exception:
+            pass
+
+        if not alive:
+            try:
+                import web_server
+                threading.Thread(target=lambda: web_server.run_server(port=5050, open_browser=False), daemon=True).start()
+                for _ in range(15):
+                    time.sleep(0.2)
+                    try:
+                        with urllib.request.urlopen("http://127.0.0.1:5050/api/status", timeout=0.5) as res:
+                            if res.status == 200:
+                                alive = True
+                                break
+                    except Exception:
+                        pass
+            except Exception as e:
+                print(f"Error starting web server: {e}")
+
+        webbrowser.open(server_url)
 
     def setup_ui(self):
         # Header banner
@@ -233,6 +343,22 @@ class VideoSeparatorGUI:
         )
         btn_key.pack(side="left", padx=(0, 10))
 
+        btn_web = tk.Button(
+            ctrl_bar,
+            text="🌐 Web Studio (localhost:5050)",
+            font=("Segoe UI", 9, "bold"),
+            bg="#0284c7",
+            fg="#ffffff",
+            activebackground="#0ea5e9",
+            activeforeground="#ffffff",
+            padx=12,
+            pady=4,
+            relief="flat",
+            cursor="hand2",
+            command=self.open_web_app
+        )
+        btn_web.pack(side="left", padx=(0, 10))
+
         btn_open_out = tk.Button(
             ctrl_bar,
             text="📂 Open Output Folder",
@@ -245,7 +371,7 @@ class VideoSeparatorGUI:
             pady=4,
             relief="flat",
             cursor="hand2",
-            command=lambda: os.startfile(str(OUTPUT_DIR))
+            command=lambda: open_directory_in_explorer(OUTPUT_DIR)
         )
         btn_open_out.pack(side="right")
 
@@ -352,7 +478,7 @@ class VideoSeparatorGUI:
             pady=2,
             relief="flat",
             cursor="hand2",
-            command=lambda: os.startfile(str(INPUT_DIR))
+            command=lambda: open_directory_in_explorer(INPUT_DIR)
         )
         btn_open_input_dir.pack(side="left")
 
@@ -561,10 +687,8 @@ class VideoSeparatorGUI:
         tk.Button(win, text="सुरक्षित गर्नुहोस् (Save Key)", font=("Segoe UI", 10, "bold"), bg="#059669", fg="#ffffff", padx=16, pady=6, relief="flat", cursor="hand2", command=save_k).pack(anchor="e", padx=20)
 
     def browse_and_add_files(self):
-        is_cut = (self.import_mode_var.get() == "cut")
-        action_text = "Cut & Move (सार्ने)" if is_cut else "Copy (प्रतिलिपि)"
         selected = filedialog.askopenfilenames(
-            title=f"भिडियो वा मिडिया छान्नुहोस् ({action_text})",
+            title="भिडियो वा मिडिया छान्नुहोस् (Direct CUT)",
             filetypes=[
                 ("Media Files (*.mp4, *.mov, *.jpg, etc.)", "*.mp4 *.mov *.mkv *.avi *.webm *.m4v *.jpg *.jpeg *.png *.webp"),
                 ("All Files", "*.*")
@@ -576,73 +700,53 @@ class VideoSeparatorGUI:
             for s in selected:
                 src_path = Path(s)
                 dest_path = INPUT_DIR / src_path.name
-                if is_cut:
-                    if safe_move_file(src_path, dest_path):
-                        count += 1
-                else:
-                    try:
-                        shutil.copy2(str(src_path), str(dest_path))
-                        count += 1
-                    except Exception:
-                        pass
+                if safe_move_file(src_path, dest_path):
+                    count += 1
             self.refresh_file_list()
-            mode_lbl = "✂️ CUT & Move गरियो" if is_cut else "📋 Copy गरियो"
-            self.status_bar.config(text=f"✅ {mode_lbl} ({count} वटा फाइलहरू input_media मा आए)!")
+            self.status_bar.config(text=f"✅ ✂️ CUT & Move गरियो ({count} वटा फाइलहरू input_media मा आए)!")
 
     def browse_and_add_folder(self):
-        is_cut = (self.import_mode_var.get() == "cut")
-        action_text = "Cut & Move (सार्ने)" if is_cut else "Copy (प्रतिलिपि)"
-        selected = filedialog.askdirectory(title=f"भिडियो भएको फोल्डर छान्नुहोस् ({action_text})", parent=self.root)
+        selected = filedialog.askdirectory(title="भिडियो भएको फोल्डर छान्नुहोस् (Direct CUT)", parent=self.root)
         if selected:
             src_dir = Path(selected)
             dest_dir = INPUT_DIR / src_dir.name
-            if is_cut:
-                if not dest_dir.exists():
+            if not dest_dir.exists():
+                try:
+                    shutil.move(str(src_dir), str(dest_dir))
+                except Exception:
+                    shutil.copytree(str(src_dir), str(dest_dir))
                     try:
-                        shutil.move(str(src_dir), str(dest_dir))
-                    except Exception:
-                        shutil.copytree(str(src_dir), str(dest_dir))
-                        try:
-                            shutil.rmtree(str(src_dir))
-                        except Exception:
-                            pass
-                else:
-                    for f in list(src_dir.iterdir()):
-                        if f.is_file():
-                            safe_move_file(f, dest_dir / f.name)
-                        elif f.is_dir():
-                            sub_dest = dest_dir / f.name
-                            if not sub_dest.exists():
-                                try:
-                                    shutil.move(str(f), str(sub_dest))
-                                except Exception:
-                                    shutil.copytree(str(f), str(sub_dest))
-                                    try:
-                                        shutil.rmtree(str(f))
-                                    except Exception:
-                                        pass
-                            else:
-                                for sf in list(f.iterdir()):
-                                    safe_move_file(sf, sub_dest / sf.name)
-                                try:
-                                    f.rmdir()
-                                except Exception:
-                                    pass
-                    try:
-                        src_dir.rmdir()
+                        shutil.rmtree(str(src_dir))
                     except Exception:
                         pass
-                self.refresh_file_list()
-                self.status_bar.config(text=f"✅ ✂️ फोल्डर '{src_dir.name}' CUT गरेर input_media मा सारियो!")
             else:
-                if not dest_dir.exists():
-                    shutil.copytree(str(src_dir), str(dest_dir))
-                else:
-                    for f in src_dir.iterdir():
-                        if f.is_file():
-                            shutil.copy2(str(f), str(dest_dir / f.name))
-                self.refresh_file_list()
-                self.status_bar.config(text=f"✅ 📋 फोल्डर '{src_dir.name}' copy गरेर input_media मा थपियो!")
+                for f in list(src_dir.iterdir()):
+                    if f.is_file():
+                        safe_move_file(f, dest_dir / f.name)
+                    elif f.is_dir():
+                        sub_dest = dest_dir / f.name
+                        if not sub_dest.exists():
+                            try:
+                                shutil.move(str(f), str(sub_dest))
+                            except Exception:
+                                shutil.copytree(str(f), str(sub_dest))
+                                try:
+                                    shutil.rmtree(str(f))
+                                except Exception:
+                                    pass
+                        else:
+                            for sf in list(f.iterdir()):
+                                safe_move_file(sf, sub_dest / sf.name)
+                            try:
+                                f.rmdir()
+                            except Exception:
+                                pass
+                try:
+                    src_dir.rmdir()
+                except Exception:
+                    pass
+            self.refresh_file_list()
+            self.status_bar.config(text=f"✅ ✂️ फोल्डर '{src_dir.name}' CUT गरेर input_media मा सारियो!")
 
     def refresh_file_list(self):
         self.file_listbox.delete(0, tk.END)
@@ -689,10 +793,20 @@ class VideoSeparatorGUI:
 
     def log(self, text):
         self.msg_queue.put(("log", text))
+        try:
+            import web_server
+            web_server.state.add_log(text)
+        except Exception:
+            pass
 
     def clear_log(self):
         self.txt_output.delete("1.0", tk.END)
         self.status_bar.config(text="🧹 Live logs हटाइयो (Cleared)!")
+        try:
+            import web_server
+            web_server.state.clear_logs()
+        except Exception:
+            pass
 
     def request_stop(self):
         if self.is_processing and not self.stop_requested:
@@ -700,6 +814,11 @@ class VideoSeparatorGUI:
             self.btn_stop.config(state="disabled", text="⏳ Stopping...", bg="#7f1d1d")
             self.status_bar.config(text="🛑 Analysis रोकिँदैछ... कृपया हालको फाइलको कार्य नसकिउन्जेल पर्खनुहोस्...")
             self.log("\n⚠️ Stop अनुरोध प्राप्त भयो! रोकिने प्रक्रिया सुरु भयो...")
+            try:
+                import web_server
+                web_server.state.stop_requested = True
+            except Exception:
+                pass
 
     def check_queue(self):
         try:
@@ -718,6 +837,19 @@ class VideoSeparatorGUI:
                     messagebox.showinfo("Status", data)
         except queue.Empty:
             pass
+
+        # Live Web Studio state sync
+        try:
+            import web_server
+            ws_state = getattr(web_server, 'state', None)
+            if ws_state:
+                if not self.is_processing and ws_state.is_processing:
+                    self.status_bar.config(text=f"🌐 Web Studio: [{ws_state.progress_current}/{ws_state.progress_total}] {ws_state.current_file}")
+                elif self.is_processing and ws_state.stop_requested:
+                    self.stop_requested = True
+        except Exception:
+            pass
+
         self.root.after(100, self.check_queue)
 
     def start_process_selected_video(self):
@@ -755,11 +887,28 @@ class VideoSeparatorGUI:
         client = genai.Client(api_key=api_key)
 
         total_files = len(targets)
+        try:
+            import web_server
+            web_server.state.is_processing = True
+            web_server.state.stop_requested = False
+            web_server.state.progress_total = total_files
+        except Exception:
+            pass
+
         for i, media_path in enumerate(targets, 1):
+            try:
+                import web_server
+                web_server.state.current_file = media_path.name
+                web_server.state.progress_current = i
+                if web_server.state.stop_requested:
+                    self.stop_requested = True
+            except Exception:
+                pass
+
             if self.stop_requested:
                 self.log("\n🛑 Analysis प्रयोगकर्ताद्वारा रोकियो (Stopped by user)!")
                 self.msg_queue.put(("finished", "🛑 Analysis बीचमै रोकियो। बाँकी फाइलहरू सुरक्षित छन्।"))
-                return
+                break
 
             if not media_path.exists():
                 continue
@@ -866,6 +1015,9 @@ CRITICAL RULES:
                         if "503" in err_str or "404" in err_str or "demand" in err_str.lower():
                             time.sleep(1)
                             continue
+                        else:
+                            self.log(f"   [!] Model notice ({model_name}): {err_str[:80]}")
+                            continue
 
             except Exception as e:
                 self.log(f"   [!] Gemini Error: {e}")
@@ -875,15 +1027,26 @@ CRITICAL RULES:
                         client.files.delete(name=uploaded_file.name)
                     except Exception:
                         pass
+                uploaded_file = None
+                import gc
+                gc.collect()
+                time.sleep(0.2)
 
             if self.stop_requested:
                 self.log("\n🛑 Analysis प्रयोगकर्ताद्वारा रोकियो (Stopped)!")
                 self.msg_queue.put(("finished", "🛑 Analysis बीचमै रोकियो। बाँकी फाइलहरू सुरक्षित छन्।"))
                 return
 
-            # Safe move & rename (never crashes if target exists)
+            # Strictly CUT & Move media from input_media to output_media
             target_media = target_folder / renamed_filename
             safe_move_file(media_path, target_media)
+            if media_path.exists():
+                try:
+                    import gc
+                    gc.collect()
+                    media_path.unlink()
+                except Exception:
+                    pass
 
             # Clean up empty parent folder inside input_media if it was inside a subfolder
             if media_path.parent != INPUT_DIR:
@@ -909,10 +1072,22 @@ CRITICAL RULES:
             with open(txt_path, "w", encoding="utf-8") as f:
                 f.write(ai_output.strip())
 
+            try:
+                import web_server
+                web_server.state.latest_result = ai_output.strip()
+            except Exception:
+                pass
+
             self.log(f"   ✂️  CUT & RENAME ➔ {target_folder.name}/{renamed_filename}")
             self.log(f"   📝 Pure Gemini .txt Saved: {txt_path.name}")
 
         self.msg_queue.put(("finished", f"🎉 सबै {total_files} वटा भिडियोहरू Gemini AI ले विश्लेषण गरी शुद्ध Hook, Caption, र Hashtag सहित CUT र Rename गरियो!"))
+        self.is_processing = False
+        try:
+            import web_server
+            web_server.state.is_processing = False
+        except Exception:
+            pass
 
 def main():
     root = tk.Tk()

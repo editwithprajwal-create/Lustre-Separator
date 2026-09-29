@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const statTotalVideos = document.getElementById('statTotalVideos');
     const statProcessedCount = document.getElementById('statProcessedCount');
     const selectionSummary = document.getElementById('selectionSummary');
+    const btnDeleteSelected = document.getElementById('btnDeleteSelected');
     const btnRefreshFiles = document.getElementById('btnRefreshFiles');
 
     const platformSelect = document.getElementById('platformSelect');
@@ -40,11 +41,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const btnCopyResult = document.getElementById('btnCopyResult');
     const btnClearResult = document.getElementById('btnClearResult');
+    const btnResetDoneHeader = document.getElementById('btnResetDoneHeader');
     const btnCopyHook = document.getElementById('btnCopyHook');
     const btnCopyCaption = document.getElementById('btnCopyCaption');
-    const btnClearCaption = document.getElementById('btnClearCaption');
     const btnCopyTags = document.getElementById('btnCopyTags');
-    const btnClearTags = document.getElementById('btnClearTags');
 
     const btnOpenInputFolder = document.getElementById('btnOpenInputFolder');
     const btnOpenOutputFolder = document.getElementById('btnOpenOutputFolder');
@@ -99,6 +99,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const folderPickerInput = document.getElementById('folderPickerInput');
     const btnEmptyAddFiles = document.getElementById('btnEmptyAddFiles');
     const btnEmptyAddFolder = document.getElementById('btnEmptyAddFolder');
+    const chkDirectMode = document.getElementById('chkDirectMode');
+    const directModeBox = document.getElementById('directModeBox');
+    let isDirectMode = false;
 
     const toast = document.getElementById('toast');
     const toastMsg = document.getElementById('toastMsg');
@@ -184,6 +187,8 @@ document.addEventListener('DOMContentLoaded', () => {
             selectionSummary.innerHTML = '<i class="fa-solid fa-circle-info"></i><span>No video selected</span>';
             btnProcessSelected.disabled = true;
             btnProcessAll.disabled = true;
+            if (btnDirectExtractSelected) btnDirectExtractSelected.style.display = 'none';
+            if (btnDeleteSelected) btnDeleteSelected.style.display = 'none';
             return;
         }
 
@@ -201,6 +206,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const ext = f.name.substring(f.name.lastIndexOf('.'));
             const folderPart = f.name.includes('/') ? f.name.split('/')[0] : f.name.replace(/\.[^/.]+$/, "");
 
+            const targetHtml = isDirectMode
+                ? `<span class="file-target-rename" style="color:#ffd700;"><i class="fa-solid fa-shield-halved"></i> Direct Extract: <code>Original Untouched</code> (0 Moves/Saves)</span>`
+                : `<span class="file-target-rename"><i class="fa-solid fa-arrow-right"></i> Target: <code>${folderPart}/1${ext}</code> (Sequential)</span>`;
+
             row.innerHTML = `
                 <div class="file-row-left">
                     <div class="file-badge-icon">
@@ -208,11 +217,26 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div class="file-title-wrap">
                         <span class="file-primary-name" title="${f.name}">${f.name}</span>
-                        <span class="file-target-rename"><i class="fa-solid fa-arrow-right"></i> Target: <code>${folderPart}/1${ext}</code> (Sequential)</span>
+                        ${targetHtml}
                     </div>
                 </div>
-                <span class="file-size-tag">${f.size_mb} MB</span>
+                <div class="file-row-right">
+                    <span class="file-size-tag">${f.size_mb} MB</span>
+                    <button type="button" class="file-delete-btn" title="Delete '${f.name}' from input_media" data-rel="${f.rel_path}">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
             `;
+
+            const delBtn = row.querySelector('.file-delete-btn');
+            if (delBtn) {
+                delBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    if (confirm(`Delete '${f.name}' from input_media?`)) {
+                        await deleteFile(f.rel_path, f.name);
+                    }
+                });
+            }
 
             row.addEventListener('click', () => {
                 selectedFile = f;
@@ -220,6 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 row.classList.add('selected');
                 selectionSummary.innerHTML = `<i class="fa-solid fa-circle-check text-cyan"></i><span>Selected: ${f.name} (${f.size_mb} MB)</span>`;
                 btnProcessSelected.disabled = isProcessing;
+                if (btnDeleteSelected) btnDeleteSelected.style.display = 'inline-flex';
             });
 
             filesList.appendChild(row);
@@ -231,7 +256,41 @@ document.addEventListener('DOMContentLoaded', () => {
             if (firstRow) firstRow.classList.add('selected');
             selectionSummary.innerHTML = `<i class="fa-solid fa-circle-check text-cyan"></i><span>Selected: ${selectedFile.name} (${selectedFile.size_mb} MB)</span>`;
             btnProcessSelected.disabled = isProcessing;
+            if (btnDeleteSelected) btnDeleteSelected.style.display = 'inline-flex';
+        } else if (selectedFile && btnDeleteSelected) {
+            btnDeleteSelected.style.display = 'inline-flex';
         }
+    }
+
+    async function deleteFile(relPath, fileName) {
+        try {
+            const res = await fetch('/api/delete_file', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ file: relPath })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                showToast(`🗑️ Deleted: ${fileName || relPath}`);
+                if (selectedFile && selectedFile.rel_path === relPath) {
+                    selectedFile = null;
+                }
+                await loadFiles();
+            } else {
+                showToast(`❌ ${data.error || 'Failed to delete file'}`);
+            }
+        } catch (err) {
+            showToast('❌ Delete error: ' + err.message);
+        }
+    }
+
+    if (btnDeleteSelected) {
+        btnDeleteSelected.addEventListener('click', async () => {
+            if (!selectedFile) return;
+            if (confirm(`Delete '${selectedFile.name}' from input_media?`)) {
+                await deleteFile(selectedFile.rel_path, selectedFile.name);
+            }
+        });
     }
 
     async function startProcessing(targets) {
@@ -239,11 +298,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/process', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ files: targets, platform: currentPlatform })
+                body: JSON.stringify({ files: targets, platform: currentPlatform, direct_mode: isDirectMode })
             });
             const data = await res.json();
             if (res.ok) {
-                showToast('🚀 Analysis started via Gemini AI!');
+                const msg = isDirectMode ? '⚡ Direct AI Extraction started! (Originals untouched)' : '🚀 Processing started via Gemini AI!';
+                showToast(msg);
             } else {
                 showToast(`❌ ${data.error || 'Failed to start'}`);
             }
@@ -314,6 +374,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     : 'Attaching video to Gemini Cloud...';
             } else {
                 progressCurrentStatus.textContent = 'Ready for video analysis.';
+            }
+
+            if (aiVisualizer) {
+                aiVisualizer.classList.toggle('active', isProcessing);
             }
 
             // Update Console Logs
@@ -431,10 +495,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return div.innerHTML;
     }
 
-    // Event Handlers
+    // Full Refresh & Reset Handlers
     btnRefreshFiles.addEventListener('click', () => {
-        loadFiles();
-        showToast('🔄 Media queue refreshed');
+        performFullStudioReset();
     });
 
     btnClearConsole.addEventListener('click', () => {
@@ -454,13 +517,63 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnStop.addEventListener('click', stopProcessing);
 
-    btnOpenInputFolder.addEventListener('click', async () => {
-        await fetch('/api/open_input', { method: 'POST' });
-    });
+    if (btnOpenInputFolder) {
+        btnOpenInputFolder.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            showToast('📂 Opening input_media folder in Windows Explorer...');
+            const baseUrl = (window.location.protocol === 'file:') ? 'http://127.0.0.1:5050' : '';
+            try {
+                const res = await fetch(`${baseUrl}/api/open_input`, { method: 'POST' });
+                const data = await res.json();
+                if (data && data.ok) {
+                    showToast('✅ input_media folder opened in Windows Explorer');
+                } else {
+                    const res2 = await fetch(`${baseUrl}/api/open_input`);
+                    const data2 = await res2.json();
+                    if (data2 && data2.ok) {
+                        showToast('✅ input_media folder opened');
+                    }
+                }
+            } catch (err) {
+                try {
+                    await fetch('http://127.0.0.1:5050/api/open_input');
+                    showToast('✅ input_media folder opened');
+                } catch (e2) {
+                    showToast('⚠️ Could not open folder. Please make sure web server is running.');
+                }
+            }
+        });
+    }
 
-    btnOpenOutputFolder.addEventListener('click', async () => {
-        await fetch('/api/open_output', { method: 'POST' });
-    });
+    if (btnOpenOutputFolder) {
+        btnOpenOutputFolder.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            showToast('📁 Opening output_media folder in Windows Explorer...');
+            const baseUrl = (window.location.protocol === 'file:') ? 'http://127.0.0.1:5050' : '';
+            try {
+                const res = await fetch(`${baseUrl}/api/open_output`, { method: 'POST' });
+                const data = await res.json();
+                if (data && data.ok) {
+                    showToast('✅ output_media folder opened in Windows Explorer');
+                } else {
+                    const res2 = await fetch(`${baseUrl}/api/open_output`);
+                    const data2 = await res2.json();
+                    if (data2 && data2.ok) {
+                        showToast('✅ output_media folder opened');
+                    }
+                }
+            } catch (err) {
+                try {
+                    await fetch('http://127.0.0.1:5050/api/open_output');
+                    showToast('✅ output_media folder opened');
+                } catch (e2) {
+                    showToast('⚠️ Could not open folder. Please make sure web server is running.');
+                }
+            }
+        });
+    }
 
     // Copy Handlers
     btnCopyResult.addEventListener('click', () => {
@@ -508,64 +621,64 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================================
     // Clear Handlers
     // =========================================================================
+    // Unified Master Reset & Full Refresh (Single Clear in One Place)
+    // =========================================================================
+    async function performFullStudioReset() {
+        try {
+            await fetch('/api/reset_all', { method: 'POST' });
+        } catch (e) {}
 
-    // Master Clear Result: Clears whole AI Social Media Package (Caption & Hashtags)
+        // 1. Reset Done count & Progress Trackers
+        processedCount = 0;
+        if (statProcessedCount) statProcessedCount.textContent = '0';
+        if (progressBarFill) progressBarFill.style.width = '0%';
+        if (progressCounter) progressCounter.textContent = '0 / 0';
+        if (progressCurrentStatus) progressCurrentStatus.textContent = 'Ready for video analysis.';
+        if (statusBadge) {
+            statusBadge.textContent = 'IDLE';
+            statusBadge.className = 'status-badge';
+        }
+        if (aiVisualizer) aiVisualizer.classList.remove('active');
+
+        // 2. Clear Social Media Package (Caption, Hashtags & Hooks)
+        if (resultContent) resultContent.textContent = '';
+        if (captionDisplay) {
+            captionDisplay.textContent = 'Story-driven caption in fluent English with context & emojis will appear here after analysis...';
+        }
+        if (captionStatsBadge) {
+            captionStatsBadge.textContent = '0 chars • 0 words';
+        }
+        if (tagsDisplay) {
+            tagsDisplay.innerHTML = '';
+        }
+        if (tagsCountBadge) {
+            tagsCountBadge.textContent = '0 hashtags';
+        }
+        if (hookDisplay) {
+            hookDisplay.textContent = 'Awaiting video analysis...';
+        }
+        const hookCard = document.querySelector('.hook-card');
+        if (hookCard) hookCard.style.display = 'none';
+
+        if (simCaptionBody) {
+            simCaptionBody.innerHTML = 'Your caption and hashtags will preview here in real mobile social feed format!';
+        }
+
+        // 3. Reload Queue from Disk
+        await loadFiles();
+        showToast('🔄 Studio Fully Refreshed: Done counter & output reset to 0!');
+    }
+
+    // Master Clear button in showcase header (single location)
     if (btnClearResult) {
-        btnClearResult.addEventListener('click', async () => {
-            try {
-                await fetch('/api/clear_result', { method: 'POST' });
-            } catch (e) {}
-
-            resultContent.textContent = '';
-            if (captionDisplay) {
-                captionDisplay.textContent = 'Story-driven caption in fluent English with context & emojis will appear here after analysis...';
-            }
-            if (captionStatsBadge) {
-                captionStatsBadge.textContent = '0 chars • 0 words';
-            }
-            if (tagsDisplay) {
-                tagsDisplay.innerHTML = '';
-            }
-            if (tagsCountBadge) {
-                tagsCountBadge.textContent = '0 hashtags';
-            }
-            if (hookDisplay) {
-                hookDisplay.textContent = 'Awaiting video analysis...';
-            }
-            const hookCard = document.querySelector('.hook-card');
-            if (hookCard) hookCard.style.display = 'none';
-
-            if (simCaptionBody) {
-                simCaptionBody.innerHTML = 'Your caption and hashtags will preview here in real mobile social feed format!';
-            }
-
-            showToast('🧹 Caption & Hashtags cleared!');
-        });
+        btnClearResult.addEventListener('click', performFullStudioReset);
     }
 
-    // Clear Caption Box only
-    if (btnClearCaption) {
-        btnClearCaption.addEventListener('click', () => {
-            if (captionDisplay) {
-                captionDisplay.textContent = '';
-            }
-            if (captionStatsBadge) {
-                captionStatsBadge.textContent = '0 chars • 0 words';
-            }
-            showToast('🧹 Caption cleared!');
-        });
-    }
-
-    // Clear Hashtags Box only
-    if (btnClearTags) {
-        btnClearTags.addEventListener('click', () => {
-            if (tagsDisplay) {
-                tagsDisplay.innerHTML = '';
-            }
-            if (tagsCountBadge) {
-                tagsCountBadge.textContent = '0 hashtags';
-            }
-            showToast('🧹 Hashtags cleared!');
+    // Top Header Reset button on the Done pill
+    if (btnResetDoneHeader) {
+        btnResetDoneHeader.addEventListener('click', (e) => {
+            e.stopPropagation();
+            performFullStudioReset();
         });
     }
 
@@ -595,6 +708,24 @@ document.addEventListener('DOMContentLoaded', () => {
             if (simCaptionBody) {
                 simCaptionBody.innerHTML = escapeHtml(text).replace(/(#[\w\u0080-\uFFFF]+)/g, '<span style="color:#38bdf8; font-weight:700;">$1</span>');
             }
+        });
+    }
+
+    // Interactive Platform Chips Selector
+    if (platformChips && platformChips.length > 0) {
+        platformChips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                const plat = chip.getAttribute('data-platform');
+                if (!plat) return;
+                currentPlatform = plat;
+                platformChips.forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+                if (platformSelect) {
+                    platformSelect.value = plat;
+                }
+                const label = chip.querySelector('span')?.textContent || plat;
+                showToast(`🎯 Target platform set to ${label}!`);
+            });
         });
     }
 
@@ -744,14 +875,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 if (btnStudioProBadge) btnStudioProBadge.classList.remove('has-update');
-                if (studioProVersionText) studioProVersionText.textContent = `v${data.current_version || '2.4.0'}`;
-                if (spMenuVersionBadge) spMenuVersionBadge.textContent = `v${data.current_version || '2.4.0'}`;
+                if (studioProVersionText) studioProVersionText.textContent = `v${data.current_version || '2.5.0'}`;
+                if (spMenuVersionBadge) spMenuVersionBadge.textContent = `v${data.current_version || '2.5.0'}`;
                 if (spUpdateHint) spUpdateHint.textContent = '✅ Latest build installed';
                 if (spBadgeUpdate) spBadgeUpdate.style.display = 'none';
                 if (spMenuUpdateDesc) spMenuUpdateDesc.textContent = 'Check & pull latest updates';
 
                 if (versionUpdaterPill) versionUpdaterPill.classList.remove('update-ready');
-                if (versionLabel) versionLabel.textContent = `v${data.current_version || '2.4.0'}`;
+                if (versionLabel) versionLabel.textContent = `v${data.current_version || '2.5.0'}`;
                 if (btnQuickUpdate) btnQuickUpdate.style.display = 'none';
                 if (tabUpdateDot) tabUpdateDot.style.display = 'none';
 
@@ -947,7 +1078,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (validMedia.length === 0) {
-            showToast('⚠️ No video or image files found in dropped items!');
+            showToast('⚠️ No video or image files found in selected items!');
             return;
         }
 
@@ -961,7 +1092,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (uploadBarFill) uploadBarFill.style.width = `${Math.round(((i) / validMedia.length) * 100)}%`;
 
             try {
-                await fetch('/api/upload', {
+                const res = await fetch('/api/upload', {
                     method: 'POST',
                     headers: {
                         'X-Relative-Path': encodeURIComponent(item.relPath),
@@ -970,9 +1101,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     },
                     body: item.file
                 });
-                uploadedCount++;
+                if (res.ok) {
+                    uploadedCount++;
+                } else {
+                    const err = await res.json().catch(() => ({}));
+                    console.error('Upload failed for', item.relPath, err);
+                    showToast(`⚠️ Upload error: ${err.error || ('HTTP ' + res.status)}`);
+                }
             } catch (err) {
                 console.error('Upload failed for', item.relPath, err);
+                showToast(`❌ Network error uploading ${item.file.name}`);
             }
 
             if (uploadBarFill) uploadBarFill.style.width = `${Math.round(((i + 1) / validMedia.length) * 100)}%`;
@@ -982,7 +1120,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (uploadModal) uploadModal.classList.remove('show', 'active');
             if (uploadBarFill) uploadBarFill.style.width = '0%';
             loadFiles();
-            showToast(`✨ Uploaded ${uploadedCount} file(s) into Queue!`);
+            if (uploadedCount > 0) {
+                showToast(`✨ Successfully uploaded ${uploadedCount} file(s) into Media Queue!`);
+            }
         }, 500);
     }
 
@@ -1037,18 +1177,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // File / Folder Picker Fallback Buttons
-    if (btnAddFiles && filePickerInput) {
-        btnAddFiles.addEventListener('click', () => filePickerInput.click());
+    // File / Folder Pickers -> Open browser native dialog directly
+    function triggerFilePicker() {
+        if (filePickerInput) {
+            filePickerInput.value = '';
+            filePickerInput.click();
+        }
     }
-    if (btnEmptyAddFiles && filePickerInput) {
-        btnEmptyAddFiles.addEventListener('click', () => filePickerInput.click());
+
+    function triggerFolderPicker() {
+        if (folderPickerInput) {
+            folderPickerInput.value = '';
+            folderPickerInput.click();
+        }
     }
-    if (btnAddFolder && folderPickerInput) {
-        btnAddFolder.addEventListener('click', () => folderPickerInput.click());
+
+    if (btnAddFiles) {
+        btnAddFiles.addEventListener('click', triggerFilePicker);
     }
-    if (btnEmptyAddFolder && folderPickerInput) {
-        btnEmptyAddFolder.addEventListener('click', () => folderPickerInput.click());
+    if (btnEmptyAddFiles) {
+        btnEmptyAddFiles.addEventListener('click', triggerFilePicker);
+    }
+    if (btnAddFolder) {
+        btnAddFolder.addEventListener('click', triggerFolderPicker);
+    }
+    if (btnEmptyAddFolder) {
+        btnEmptyAddFolder.addEventListener('click', triggerFolderPicker);
     }
 
     if (filePickerInput) {
@@ -1069,6 +1223,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 folderPickerInput.value = '';
             }
         });
+    }
+
+    // =========================================================================
+    // Direct Extract Mode Toggle (Switch ON / OFF)
+    // =========================================================================
+    if (chkDirectMode) {
+        chkDirectMode.addEventListener('change', () => {
+            isDirectMode = chkDirectMode.checked;
+            if (directModeBox) directModeBox.classList.toggle('active', isDirectMode);
+            updateDirectModeUI();
+        });
+    }
+
+    function updateDirectModeUI() {
+        const btnTitle = document.querySelector('.hero-btn-title');
+        const btnSub = document.querySelector('.hero-btn-sub');
+        const selBtn = document.getElementById('btnProcessSelected');
+
+        if (isDirectMode) {
+            if (btnTitle) btnTitle.textContent = '⚡ DIRECT EXTRACT ALL';
+            if (btnSub) btnSub.textContent = 'Original files untouched • 0 moves or saves';
+            if (selBtn) selBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-gold"></i> <span>Direct Extract Selected</span>';
+            showToast('⚡ Direct Extract Mode ON: Videos remain untouched (0 moves/saves)!');
+        } else {
+            if (btnTitle) btnTitle.textContent = 'PROCESS & RENAME ALL';
+            if (btnSub) btnSub.textContent = 'Renames to 1.mp4, 2.mp4 & writes captions';
+            if (selBtn) selBtn.innerHTML = '<i class="fa-solid fa-play"></i> <span>Process Selected</span>';
+            showToast('📁 Standard Process & Rename Mode ON');
+        }
+
+        renderFiles();
     }
 
     // Initial Load & Loop

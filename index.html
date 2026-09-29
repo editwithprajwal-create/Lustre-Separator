@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>✨ Lustre Separator - AI Video SEO & Media Organizer</title>
-    <link rel="icon" type="image/png" href="assets/logo.png">
+    <link rel="icon" type="image/png" href="assets/logo.png?v=2.5.0">
     
     <!-- Google Fonts: Outfit (Display & Headings) + Plus Jakarta Sans (Clean Modern UI) + JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -30,7 +30,7 @@
         <div class="header-inner">
             <div class="brand">
                 <div class="brand-logo-frame">
-                    <img src="assets/logo.png" alt="Lustre Separator Logo" class="brand-logo-img">
+                    <img src="assets/logo.png?v=2.5.0" alt="Lustre Separator Logo" class="brand-logo-img">
                     <div class="rotating-halo"></div>
                 </div>
                 <div class="brand-meta">
@@ -40,7 +40,7 @@
                             <button type="button" class="pro-badge interactive" id="btnStudioProBadge" title="Studio Pro • Click for API Key & Version">
                                 <span class="badge-dot" id="studioProDot"></span>
                                 <span class="pro-text">STUDIO PRO</span>
-                                <span class="pro-version-badge" id="studioProVersionText">v2.4.0</span>
+                                <span class="pro-version-badge" id="studioProVersionText">v2.5.0</span>
                                 <i class="fa-solid fa-chevron-down pro-chevron"></i>
                             </button>
 
@@ -49,7 +49,7 @@
                                 <div class="sp-menu-header">
                                     <div class="sp-title-line">
                                         <span class="sp-menu-title"><i class="fa-solid fa-shield-halved text-cyan"></i> Studio Pro Suite</span>
-                                        <span class="sp-version-pill" id="spMenuVersionBadge">v2.4.0</span>
+                                        <span class="sp-version-pill" id="spMenuVersionBadge">v2.5.0</span>
                                     </div>
                                     <span class="sp-update-hint" id="spUpdateHint">✅ Latest build installed</span>
                                 </div>
@@ -86,11 +86,14 @@
                     <span class="engine-label">Gemini Vision: <strong class="engine-status">ONLINE</strong></span>
                 </div>
 
-                <div class="queue-counter-pill">
+                <div class="queue-counter-pill" id="queueCounterPill" title="Queue & Done Status">
                     <i class="fa-solid fa-layer-group text-cyan"></i>
                     <span>Queue: <strong id="statTotalVideos">0</strong></span>
                     <span class="pill-sep">•</span>
                     <span>Done: <strong id="statProcessedCount" class="text-emerald">0</strong></span>
+                    <button type="button" class="pill-inline-reset" id="btnResetDoneHeader" title="Reset Done Count & Full Studio Refresh">
+                        <i class="fa-solid fa-rotate-right"></i>
+                    </button>
                 </div>
 
                 <div class="action-btn-group">
@@ -139,6 +142,18 @@
             </div>
 
             <div class="deck-right">
+                <!-- Direct Extract Mode Switch -->
+                <div class="direct-mode-toggle-box" id="directModeBox" title="When ON: Videos stay 100% untouched. Pure caption & hashtag extraction with zero moves or saves.">
+                    <label class="switch-toggle" for="chkDirectMode">
+                        <input type="checkbox" id="chkDirectMode">
+                        <span class="switch-slider"></span>
+                    </label>
+                    <div class="switch-label-wrap" onclick="document.getElementById('chkDirectMode').click()">
+                        <span class="switch-title"><i class="fa-solid fa-wand-magic-sparkles text-gold"></i> Direct Mode</span>
+                        <span class="switch-desc">No Move • No Save</span>
+                    </div>
+                </div>
+
                 <!-- Master Launch Button with Shimmer Sweep -->
                 <button id="btnProcessAll" class="hero-launch-btn" title="Upload all videos directly to Gemini AI and organize into numbered folders">
                     <div class="btn-ambient-glow"></div>
@@ -178,7 +193,7 @@
                         </div>
                     </div>
                     <div class="card-header-actions">
-                        <input type="file" id="filePickerInput" multiple accept="video/*,image/*" style="display:none;">
+                        <input type="file" id="filePickerInput" multiple accept=".mp4,.mov,.mkv,.avi,.webm,.m4v,.jpg,.jpeg,.png,.webp,video/*,image/*" style="display:none;">
                         <input type="file" id="folderPickerInput" webkitdirectory directory multiple style="display:none;">
                         <button id="btnAddFiles" class="mini-tool-btn" title="Add individual video files">
                             <i class="fa-solid fa-file-video"></i> <span>+ Videos</span>
@@ -186,7 +201,7 @@
                         <button id="btnAddFolder" class="mini-tool-btn" title="Add an entire folder with videos">
                             <i class="fa-solid fa-folder-plus"></i> <span>+ Folder</span>
                         </button>
-                        <button id="btnRefreshFiles" class="icon-refresh-btn" title="Refresh files from folder">
+                        <button id="btnRefreshFiles" class="icon-refresh-btn" title="Refresh files from folder & Reset Done count">
                             <i class="fa-solid fa-rotate"></i>
                         </button>
                     </div>
@@ -228,6 +243,10 @@
                         <i class="fa-solid fa-circle-info"></i>
                         <span>No video selected</span>
                     </div>
+                    <button type="button" class="btn-footer-delete" id="btnDeleteSelected" title="Delete selected video from input_media" style="display:none;">
+                        <i class="fa-solid fa-trash-can"></i>
+                        <span>Delete</span>
+                    </button>
                 </div>
             </section>
 
@@ -320,9 +339,6 @@
                                     <span class="meta-stats-chip" id="captionStatsBadge">0 chars • 0 words</span>
                                 </div>
                                 <div class="section-header-actions">
-                                    <button class="action-clear-chip" id="btnClearCaption" title="Clear Caption">
-                                        <i class="fa-solid fa-trash-can"></i> <span>Clear</span>
-                                    </button>
                                     <button class="action-copy-chip" id="btnCopyCaption" title="Copy Caption">
                                         <i class="fa-regular fa-copy"></i> <span>Copy Caption</span>
                                     </button>
@@ -343,9 +359,6 @@
                                     <span class="meta-stats-chip" id="tagsCountBadge">20 tags</span>
                                 </div>
                                 <div class="section-header-actions">
-                                    <button class="action-clear-chip" id="btnClearTags" title="Clear Hashtags">
-                                        <i class="fa-solid fa-trash-can"></i> <span>Clear</span>
-                                    </button>
                                     <button class="action-copy-chip" id="btnCopyTags" title="Copy Hashtags">
                                         <i class="fa-regular fa-copy"></i> <span>Copy All Tags</span>
                                     </button>
@@ -434,7 +447,7 @@
         <div class="modal-card settings-modal-card">
             <div class="modal-card-header">
                 <div class="modal-brand">
-                    <img src="assets/logo.png" alt="Logo" class="modal-logo-small">
+                    <img src="assets/logo.png?v=2.5.0" alt="Logo" class="modal-logo-small">
                     <h3>Application Settings &amp; Updates</h3>
                 </div>
                 <button class="modal-close-btn" id="btnCloseSettings"><i class="fa-solid fa-xmark"></i></button>
@@ -481,7 +494,7 @@
                     <div class="updater-status-card">
                         <div class="updater-info-row">
                             <span class="updater-info-label">Installed Version:</span>
-                            <span class="updater-badge version" id="modalVersionBadge">v2.4.0 (Stable)</span>
+                            <span class="updater-badge version" id="modalVersionBadge">v2.5.0 (Stable)</span>
                         </div>
                         <div class="updater-info-row">
                             <span class="updater-info-label">Git Status:</span>

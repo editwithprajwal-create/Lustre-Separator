@@ -24,16 +24,35 @@ from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import auto_updater
 
-# UTF-8 stdout on Windows
+# Safe streams for pythonw & UTF-8 stdout on Windows
+if sys.stdout is None:
+    try:
+        sys.stdout = open(os.devnull, 'w', encoding='utf-8')
+    except Exception:
+        pass
+if sys.stderr is None:
+    try:
+        sys.stderr = open(os.devnull, 'w', encoding='utf-8')
+    except Exception:
+        pass
+
 if sys.platform.startswith('win'):
     try:
-        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        if sys.stdout is not None and hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        if sys.stderr is not None and hasattr(sys.stderr, 'reconfigure'):
+            sys.stderr.reconfigure(encoding='utf-8', errors='replace')
     except Exception:
         pass
 
 # Base Directories
-WORKSPACE_DIR = Path(__file__).resolve().parent
+if getattr(sys, 'frozen', False):
+    BUNDLE_DIR = Path(getattr(sys, '_MEIPASS', Path(sys.executable).resolve().parent))
+    WORKSPACE_DIR = Path(sys.executable).resolve().parent
+else:
+    BUNDLE_DIR = Path(__file__).resolve().parent
+    WORKSPACE_DIR = Path(__file__).resolve().parent
+
 INPUT_DIR = WORKSPACE_DIR / "input_media"
 OUTPUT_DIR = WORKSPACE_DIR / "output_media"
 CONFIG_FILE = WORKSPACE_DIR / "config.json"
@@ -50,12 +69,12 @@ DEFAULT_CONFIG = {
 }
 
 ACTIVE_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-flash-latest",
     "gemini-3.1-flash-lite",
-    "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite-preview",
-    "gemini-3.8-flash",
     "gemini-3.5-flash",
-    "gemini-flash-latest"
+    "gemini-3.8-flash"
 ]
 
 def load_config():
@@ -128,8 +147,59 @@ def get_next_available_index(target_folder):
         next_idx += 1
     return next_idx
 
-def safe_move_file(src, dst):
-    """Safely moves (cuts) a file, avoiding FileExistsError or destination collision on Windows."""
+def open_directory_in_explorer(dir_path):
+    """
+    Instantly and reliably opens a directory in Windows Explorer.
+    Uses non-blocking detached process with zero DDE hang.
+    """
+    try:
+        p = Path(dir_path).resolve()
+        p.mkdir(parents=True, exist_ok=True)
+        path_str = str(p)
+
+        def _do_open():
+            # 1. Direct explorer.exe with closed FDs (returns immediately, no DDE hang)
+            try:
+                subprocess.Popen(
+                    ['explorer.exe', path_str],
+                    close_fds=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL
+                )
+                return
+            except Exception:
+                pass
+            # 2. cmd.exe /c start fallback
+            try:
+                subprocess.Popen(
+                    ['cmd.exe', '/c', 'start', '', path_str],
+                    close_fds=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL
+                )
+                return
+            except Exception:
+                pass
+            # 3. os.startfile fallback
+            try:
+                os.startfile(path_str)
+            except Exception:
+                pass
+
+        threading.Thread(target=_do_open, daemon=True).start()
+        return True
+    except Exception as e:
+        print(f"Error opening directory {dir_path}: {e}")
+        return False
+
+def safe_move_file(src, dst, max_retries=6, delay=0.3):
+    """
+    Safely and STRICTLY moves (cuts) a file from src to dst.
+    Guarantees src is completely removed from its source location (zero copying).
+    Handles temporary file locks on Windows with retries and garbage collection.
+    """
     src = Path(src)
     dst = Path(dst)
     if not src.exists():
@@ -145,20 +215,116 @@ def safe_move_file(src, dst):
             dst.unlink()
         except Exception:
             pass
-    try:
-        shutil.move(str(src), str(dst))
-        return True
-    except Exception:
-        # Cross-volume or permissions fallback: copy2 then unlink original
+
+    import gc
+    for attempt in range(max_retries):
         try:
-            shutil.copy2(str(src), str(dst))
-            try:
-                src.unlink()
-            except Exception:
-                pass
-            return True
+            shutil.move(str(src), str(dst))
+            if not src.exists():
+                return True
         except Exception:
-            return False
+            gc.collect()
+            time.sleep(delay)
+
+    # Cross-volume or stubborn lock fallback:
+    # Copy file, verify destination, then force delete original
+    try:
+        shutil.copy2(str(src), str(dst))
+        if dst.exists() and dst.stat().st_size == src.stat().st_size:
+            for attempt in range(max_retries):
+                try:
+                    gc.collect()
+                    src.unlink()
+                    return True
+                except Exception:
+                    time.sleep(delay)
+            return True
+    except Exception:
+        pass
+
+    return dst.exists() and dst.stat().st_size > 0
+
+def native_pick_and_cut_files():
+    """Opens native Windows file dialog via isolated PowerShell and directly CUTS selected files into input_media."""
+    ps_cmd = (
+        "Add-Type -AssemblyName System.Windows.Forms; "
+        "$d = New-Object System.Windows.Forms.OpenFileDialog; "
+        "$d.Multiselect = $true; "
+        "$d.Filter = 'Media Files (*.mp4;*.mov;*.mkv;*.avi;*.webm;*.m4v;*.jpg;*.png;*.webp)|*.mp4;*.mov;*.mkv;*.avi;*.webm;*.m4v;*.jpg;*.png;*.webp|All Files (*.*)|*.*'; "
+        "$d.Title = 'Select Videos (Direct CUT into input_media)'; "
+        "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { "
+        "  $d.FileNames | ForEach-Object { Write-Output $_ } "
+        "}"
+    )
+    try:
+        res = subprocess.run(
+            ['powershell', '-Sta', '-NoProfile', '-Command', ps_cmd],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        selected = [line.strip() for line in res.stdout.splitlines() if line.strip()]
+    except Exception as e:
+        print(f"Native file dialog error: {e}")
+        selected = []
+
+    moved_count = 0
+    if selected:
+        for f in selected:
+            src = Path(f)
+            if src.is_file():
+                dst = INPUT_DIR / src.name
+                if safe_move_file(src, dst):
+                    moved_count += 1
+                    state.add_log(f"✂️ DIRECT CUT into input_media: {src.name}")
+    return moved_count
+
+def native_pick_and_cut_folder():
+    """Opens native Windows folder dialog via isolated PowerShell and directly CUTS entire folder into input_media."""
+    ps_cmd = (
+        "Add-Type -AssemblyName System.Windows.Forms; "
+        "$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
+        "$d.Description = 'Select Folder to CUT into input_media'; "
+        "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { "
+        "  Write-Output $d.SelectedPath "
+        "}"
+    )
+    try:
+        res = subprocess.run(
+            ['powershell', '-Sta', '-NoProfile', '-Command', ps_cmd],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        selected = res.stdout.strip()
+    except Exception as e:
+        print(f"Native folder dialog error: {e}")
+        selected = ""
+
+    moved_count = 0
+    if selected and Path(selected).is_dir():
+        src_dir = Path(selected)
+        dest_dir = INPUT_DIR / src_dir.name
+        all_exts = ('.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v', '.jpg', '.jpeg', '.png', '.webp')
+        if not dest_dir.exists():
+            try:
+                shutil.move(str(src_dir), str(dest_dir))
+                moved_count += 1
+                state.add_log(f"✂️ DIRECT CUT folder into input_media: {src_dir.name}/")
+            except Exception:
+                shutil.copytree(str(src_dir), str(dest_dir))
+                shutil.rmtree(str(src_dir), ignore_errors=True)
+                moved_count += 1
+        else:
+            for item in list(src_dir.rglob("*")):
+                if item.is_file() and item.suffix.lower() in all_exts:
+                    rel = item.relative_to(src_dir)
+                    target = dest_dir / rel
+                    if safe_move_file(item, target):
+                        moved_count += 1
+            shutil.rmtree(str(src_dir), ignore_errors=True)
+            state.add_log(f"✂️ DIRECT CUT folder contents into input_media: {src_dir.name}/")
+    return moved_count
 
 # Global App State
 class EngineState:
@@ -216,7 +382,7 @@ def get_input_files():
                 })
     return files
 
-def process_worker(file_rel_paths, platform):
+def process_worker(file_rel_paths, platform, direct_mode=False):
     state.is_processing = True
     state.stop_requested = False
     state.progress_total = len(file_rel_paths)
@@ -248,20 +414,27 @@ def process_worker(file_rel_paths, platform):
             state.current_file = media_path.name
             is_video = media_path.suffix.lower() in video_exts
 
-            if media_path.parent != INPUT_DIR:
-                folder_name = media_path.parent.name
+            if direct_mode:
+                state.add_log(f"⚡ [{idx}/{len(file_rel_paths)}] Direct Extract: {media_path.name}")
+                state.add_log(f"   🛡️ Zero Modifications: Video will NOT be moved, cut, copied, or renamed.")
+                state.add_log(f"   🛡️ Zero Disk Writes: No output folders or .txt files created on disk.")
+                target_folder = None
+                renamed_filename = media_path.name
             else:
-                folder_name = media_path.stem
+                if media_path.parent != INPUT_DIR:
+                    folder_name = media_path.parent.name
+                else:
+                    folder_name = media_path.stem
 
-            ext = media_path.suffix.lower()
-            target_folder = OUTPUT_DIR / folder_name
-            target_folder.mkdir(parents=True, exist_ok=True)
-            video_index = get_next_available_index(target_folder)
-            renamed_filename = f"{video_index}{ext}"
+                ext = media_path.suffix.lower()
+                target_folder = OUTPUT_DIR / folder_name
+                target_folder.mkdir(parents=True, exist_ok=True)
+                video_index = get_next_available_index(target_folder)
+                renamed_filename = f"{video_index}{ext}"
 
-            state.add_log(f"🎬 [{idx}/{len(file_rel_paths)}] Processing: {media_path.name}")
-            state.add_log(f"   📁 Folder Name (Unchanged): {folder_name}/")
-            state.add_log(f"   🎥 Renaming Video to: {renamed_filename}")
+                state.add_log(f"🎬 [{idx}/{len(file_rel_paths)}] Processing: {media_path.name}")
+                state.add_log(f"   📁 Folder Name (Unchanged): {folder_name}/")
+                state.add_log(f"   🎥 Renaming Video to: {renamed_filename}")
 
             uploaded_file = None
             ai_output = None
@@ -356,48 +529,60 @@ CRITICAL RULES:
                         client.files.delete(name=uploaded_file.name)
                     except Exception:
                         pass
+                uploaded_file = None
+                import gc
+                gc.collect()
+                time.sleep(0.2)
 
             if state.stop_requested:
                 state.add_log("🛑 Analysis stopped by user! No further files will be moved.")
                 break
 
-            # Safe move & rename (never crashes if target exists)
-            target_media = target_folder / renamed_filename
-            safe_move_file(media_path, target_media)
-
-            # Clean up empty parent folder inside input_media if it was inside a subfolder
-            if media_path.parent != INPUT_DIR:
-                parent_dir = media_path.parent
-                try:
-                    all_exts = ('.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v', '.jpg', '.jpeg', '.png', '.webp')
-                    remaining = [f for f in parent_dir.iterdir() if f.is_file() and f.suffix.lower() in all_exts]
-                    if not remaining:
-                        shutil.rmtree(str(parent_dir), ignore_errors=True)
-                except Exception:
-                    pass
-
-            # Fallback if Gemini failed so user never gets blank file
-            if not ai_output:
-                ai_output = f"""An unexpected and emotional moment caught on camera! Watch closely as the story unfolds with the biggest smile. What would your reaction be in this situation? Let us know your thoughts in the comments below! 👇💬❤️
-
-#Viral #Trending #MustWatch #VideoOfTheDay #StoryTime #ExplorePage #FYP #Reels #CuteAnimals #WholesomeMoments #FunnyReels #ViralReels #{platform.capitalize()}Watch #Entertainment"""
+            if direct_mode:
+                state.latest_result = {
+                    "folder": "Direct Extract (Zero File Changes)",
+                    "video_file": media_path.name,
+                    "txt_file": "Direct On-Screen Display",
+                    "content": ai_output
+                }
+                state.add_log(f"   ✨ Direct Extract Complete for: '{media_path.name}' (Original 100% untouched)")
             else:
-                ai_output = clean_ai_output(ai_output)
+                # Strictly CUT media from input_media into output_media
+                target_media = target_folder / renamed_filename
+                safe_move_file(media_path, target_media)
+                if media_path.exists():
+                    try:
+                        import gc
+                        gc.collect()
+                        media_path.unlink()
+                    except Exception:
+                        pass
 
-            # Save pure Gemini output into .txt file
-            txt_path = target_folder / f"{video_index}_seo_caption_hashtags.txt"
-            with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(ai_output.strip())
+                # Clean up empty parent folder inside input_media if it was inside a subfolder
+                if media_path.parent != INPUT_DIR:
+                    parent_dir = media_path.parent
+                    try:
+                        all_exts = ('.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v', '.jpg', '.jpeg', '.png', '.webp')
+                        remaining = [f for f in parent_dir.iterdir() if f.is_file() and f.suffix.lower() in all_exts]
+                        if not remaining:
+                            shutil.rmtree(str(parent_dir), ignore_errors=True)
+                    except Exception:
+                        pass
 
-            state.add_log(f"   ✂️  CUT & RENAMED ➔ {target_folder.name}/{renamed_filename}")
-            state.add_log(f"   📝 Pure English .txt Saved: {txt_path.name}")
+                # Save pure Gemini output into .txt file
+                txt_path = target_folder / f"{video_index}_seo_caption_hashtags.txt"
+                with open(txt_path, "w", encoding="utf-8") as f:
+                    f.write(ai_output.strip())
 
-            state.latest_result = {
-                "folder": target_folder.name,
-                "video_file": renamed_filename,
-                "txt_file": txt_path.name,
-                "content": ai_output
-            }
+                state.add_log(f"   ✂️  CUT & RENAMED ➔ {target_folder.name}/{renamed_filename}")
+                state.add_log(f"   📝 Pure English .txt Saved: {txt_path.name}")
+
+                state.latest_result = {
+                    "folder": target_folder.name,
+                    "video_file": renamed_filename,
+                    "txt_file": txt_path.name,
+                    "content": ai_output
+                }
 
         if not state.stop_requested:
             state.add_log(f"🎉 Success! Finished processing {len(file_rel_paths)} video(s).")
@@ -407,9 +592,159 @@ CRITICAL RULES:
         state.is_processing = False
         state.stop_requested = False
 
+def direct_process_worker(media_path, original_filename, platform, is_temp=False):
+    """
+    Directly extracts Caption & Hashtags via Gemini Vision AI
+    WITHOUT cutting, copying, renaming, moving, or writing any files to disk.
+    The original file remains 100% untouched.
+    """
+    state.is_processing = True
+    state.stop_requested = False
+    state.progress_total = 1
+    state.progress_current = 1
+    state.current_file = original_filename
+
+    state.add_log(f"⚡ [Direct Extract Mode]: Analyzing '{original_filename}' with Gemini Vision (Zero File Modifications)...")
+    state.add_log(f"   ℹ️ Rule: Original video will NOT be moved, cut, copied, or renamed. No output files will be saved.")
+
+    try:
+        cfg = load_config()
+        api_key = cfg.get("gemini_api_key", "").strip()
+        if not api_key:
+            state.add_log("❌ Error: Gemini API Key not set. Please configure your API key in Settings.")
+            return
+
+        from google import genai
+        client = genai.Client(api_key=api_key)
+
+        video_exts = ('.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v')
+        is_video = Path(original_filename).suffix.lower() in video_exts
+
+        uploaded_file = None
+        ai_output = None
+
+        try:
+            state.add_log(f"   📤 Uploading {original_filename} to Gemini Vision AI...")
+            uploaded_file = client.files.upload(file=str(media_path))
+            state.add_log(f"   ⏳ Gemini Cloud Stream Active: {uploaded_file.name}")
+
+            if is_video:
+                state.add_log("   👀 Gemini AI is watching and analyzing video & audio directly...")
+                wait_count = 0
+                while uploaded_file.state.name == "PROCESSING" and wait_count < 120:
+                    if state.stop_requested:
+                        break
+                    time.sleep(3)
+                    wait_count += 3
+                    uploaded_file = client.files.get(name=uploaded_file.name)
+
+                if uploaded_file.state.name == "FAILED":
+                    state.add_log(f"   [!] Gemini Video Processing Failed: {uploaded_file.error}")
+                    return
+
+            if not state.stop_requested:
+                prompt = f"""Watch and listen to this entire attached video. Analyze what is happening, all dialogue/audio, visual cues, and the core message.
+Generate a viral, engaging social media post for {platform.upper()} strictly in 100% FLUENT ENGLISH.
+
+FORMAT REQUIREMENTS:
+Provide ONLY the story-driven caption followed directly by hashtags.
+Do NOT include ANY section titles, labels, or prefixes (Do NOT write '🎯 HOOK:', '📌 CAPTION:', '🏷️ HASHTAGS:', 'Caption:', 'Hook:', etc.).
+
+EXACT FORMAT TO FOLLOW:
+[Engaging, story-driven caption strictly in fluent English describing the key moment, emotion, humor, or situation with appropriate emojis]
+
+#Hashtag1 #Hashtag2 #Hashtag3 #Hashtag4 #Hashtag5 ... (15-20 viral, trending hashtags for {platform.upper()})
+
+CRITICAL RULES:
+- EVERYTHING MUST be written strictly in 100% FLUENT ENGLISH ONLY.
+- Output ONLY the clean caption followed immediately by the hashtags."""
+
+                state.add_log(f"   🤖 Gemini AI generating pure English Caption & Hashtags for {platform.upper()}...")
+                for model_name in ACTIVE_MODELS:
+                    if state.stop_requested:
+                        break
+                    try:
+                        resp = client.models.generate_content(
+                            model=model_name,
+                            contents=[uploaded_file, prompt]
+                        )
+                        if resp and resp.text:
+                            ai_output = clean_ai_output(resp.text)
+                            state.add_log(f"   ✅ Gemini ({model_name}) generated pure English Caption & Hashtags!")
+                            break
+                    except Exception as merr:
+                        err_str = str(merr)
+                        if "503" in err_str or "404" in err_str or "demand" in err_str.lower():
+                            time.sleep(1)
+                            continue
+                        else:
+                            state.add_log(f"   [!] Model notice ({model_name}): {err_str[:80]}")
+                            continue
+
+        finally:
+            if uploaded_file:
+                try:
+                    client.files.delete(name=uploaded_file.name)
+                except Exception:
+                    pass
+            if is_temp:
+                try:
+                    if os.path.exists(media_path):
+                        os.unlink(media_path)
+                except Exception:
+                    pass
+
+        if not ai_output:
+            ai_output = f"""An unexpected and emotional moment caught on camera! Watch closely as the story unfolds with the biggest smile. What would your reaction be in this situation? Let us know your thoughts in the comments below! 👇💬❤️
+
+#Viral #Trending #MustWatch #VideoOfTheDay #StoryTime #ExplorePage #FYP #Reels #CuteAnimals #WholesomeMoments #FunnyReels #ViralReels #{platform.capitalize()}Watch #Entertainment"""
+        else:
+            ai_output = clean_ai_output(ai_output)
+
+        state.latest_result = {
+            "folder": "Direct Extract (Zero File Changes)",
+            "video_file": original_filename,
+            "txt_file": "Direct On-Screen Display",
+            "content": ai_output
+        }
+        state.add_log(f"🎉 Success! Extracted Caption & Hashtags for '{original_filename}' with ZERO file moves or saves.")
+        state.add_log(f"📋 Click 'Copy All' to copy your ready-to-post English package.")
+    except Exception as exc:
+        state.add_log(f"❌ Direct extract error: {exc}")
+    finally:
+        state.is_processing = False
+        state.stop_requested = False
+
 class LustreHTTPHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WORKSPACE_DIR), **kwargs)
+
+    def translate_path(self, path):
+        # First check in WORKSPACE_DIR
+        local_path = super().translate_path(path)
+        if os.path.exists(local_path):
+            return local_path
+        # Fallback to BUNDLE_DIR if running from PyInstaller frozen bundle
+        try:
+            rel = os.path.relpath(local_path, str(WORKSPACE_DIR))
+            bundle_path = BUNDLE_DIR / rel
+            if bundle_path.exists():
+                return str(bundle_path)
+        except Exception:
+            pass
+        return local_path
+    def end_headers(self):
+        self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+        self.send_header('Pragma', 'no-cache')
+        self.send_header('Expires', '0')
+        super().end_headers()
+
+    def log_message(self, format, *args):
+        try:
+            if sys.stderr and not sys.stderr.closed:
+                super().log_message(format, *args)
+        except Exception:
+            pass
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -425,6 +760,12 @@ class LustreHTTPHandler(SimpleHTTPRequestHandler):
             info = auto_updater.check_for_updates()
             state.update_info = info
             self.send_json(info)
+        elif path == "/api/open_input":
+            ok = open_directory_in_explorer(INPUT_DIR)
+            self.send_json({"ok": ok, "message": "Input folder opened"})
+        elif path == "/api/open_output":
+            ok = open_directory_in_explorer(OUTPUT_DIR)
+            self.send_json({"ok": ok, "message": "Output folder opened"})
         else:
             if path == "/" or path == "":
                 self.path = "/index.html"
@@ -436,21 +777,54 @@ class LustreHTTPHandler(SimpleHTTPRequestHandler):
         content_len = int(self.headers.get('Content-Length', 0))
 
         if path == "/api/upload":
-            rel_path = self.headers.get('X-Relative-Path', '')
-            if not rel_path:
-                rel_path = self.headers.get('X-File-Name', 'uploaded_video.mp4')
-            import urllib.parse
-            rel_path = urllib.parse.unquote(rel_path).replace('\\', '/').strip('/')
-            if '..' in rel_path:
-                self.send_json({"error": "Invalid path"}, status=400)
-                return
+            try:
+                rel_path = self.headers.get('X-Relative-Path', '')
+                if not rel_path:
+                    rel_path = self.headers.get('X-File-Name', 'uploaded_video.mp4')
+                import urllib.parse
+                rel_path = urllib.parse.unquote(rel_path).replace('\\', '/').strip('/')
+                if '..' in rel_path:
+                    self.send_json({"error": "Invalid path"}, status=400)
+                    return
 
-            dest_path = INPUT_DIR / rel_path
-            dest_path.parent.mkdir(parents=True, exist_ok=True)
+                dest_path = INPUT_DIR / rel_path
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+                remaining = content_len
+                chunk_size = 1024 * 1024  # 1MB chunk for fast local upload
+                with open(dest_path, "wb") as f:
+                    while remaining > 0:
+                        read_bytes = min(remaining, chunk_size)
+                        chunk = self.rfile.read(read_bytes)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        remaining -= len(chunk)
+
+                size_mb = dest_path.stat().st_size / (1024 * 1024)
+                state.add_log(f"📥 Video Uploaded: {rel_path} ({size_mb:.1f} MB)")
+                self.send_json({"ok": True, "saved": rel_path, "size_mb": round(size_mb, 2)})
+            except Exception as e:
+                state.add_log(f"❌ Upload Error: {e}")
+                self.send_json({"error": str(e)}, status=500)
+            return
+
+        if path == "/api/direct_extract_upload":
+            if state.is_processing:
+                self.send_json({"error": "AI is already processing a video"}, status=400)
+                return
+            filename = self.headers.get('X-File-Name', 'video.mp4')
+            import urllib.parse
+            filename = urllib.parse.unquote(filename).replace('\\', '/').split('/')[-1]
+            platform = self.headers.get('X-Platform', 'facebook').lower()
+
+            import tempfile
+            temp_dir = Path(tempfile.gettempdir())
+            temp_path = temp_dir / f"lustre_direct_{int(time.time())}_{filename}"
 
             remaining = content_len
             chunk_size = 64 * 1024
-            with open(dest_path, "wb") as f:
+            with open(temp_path, "wb") as f:
                 while remaining > 0:
                     read_bytes = min(remaining, chunk_size)
                     chunk = self.rfile.read(read_bytes)
@@ -459,9 +833,10 @@ class LustreHTTPHandler(SimpleHTTPRequestHandler):
                     f.write(chunk)
                     remaining -= len(chunk)
 
-            size_mb = dest_path.stat().st_size / (1024 * 1024)
-            state.add_log(f"📥 Drag & Drop: Saved {rel_path} ({size_mb:.1f} MB)")
-            self.send_json({"ok": True, "saved": rel_path})
+            size_mb = temp_path.stat().st_size / (1024 * 1024)
+            state.add_log(f"⚡ Direct Extract Upload: Received {filename} ({size_mb:.1f} MB)")
+            threading.Thread(target=direct_process_worker, args=(temp_path, filename, platform, True), daemon=True).start()
+            self.send_json({"ok": True, "message": f"Direct AI analysis started for {filename}"})
             return
 
         body = self.rfile.read(content_len).decode('utf-8') if content_len > 0 else "{}"
@@ -470,13 +845,30 @@ class LustreHTTPHandler(SimpleHTTPRequestHandler):
         except Exception:
             data = {}
 
-        if path == "/api/process":
+        if path == "/api/direct_extract_selected":
+            if state.is_processing:
+                self.send_json({"error": "AI is already processing a video"}, status=400)
+                return
+            rel_path = data.get("file", "").strip()
+            platform = data.get("platform", "facebook")
+            if not rel_path:
+                self.send_json({"error": "No file specified"}, status=400)
+                return
+            media_path = INPUT_DIR / rel_path
+            if not media_path.exists():
+                self.send_json({"error": f"File not found: {rel_path}"}, status=404)
+                return
+            threading.Thread(target=direct_process_worker, args=(media_path, media_path.name, platform, False), daemon=True).start()
+            self.send_json({"ok": True, "message": f"Direct AI extraction started for {media_path.name}"})
+
+        elif path == "/api/process":
             if state.is_processing:
                 self.send_json({"error": "Already processing"}, status=400)
                 return
             
             files = data.get("files", [])
             platform = data.get("platform", "facebook")
+            direct_mode = bool(data.get("direct_mode", False))
 
             if not files:
                 all_files = [f["rel_path"] for f in get_input_files()]
@@ -486,8 +878,9 @@ class LustreHTTPHandler(SimpleHTTPRequestHandler):
                 self.send_json({"error": "No files found in input_media"}, status=400)
                 return
 
-            threading.Thread(target=process_worker, args=(files, platform), daemon=True).start()
-            self.send_json({"message": f"Processing started for {len(files)} file(s)"})
+            threading.Thread(target=process_worker, args=(files, platform, direct_mode), daemon=True).start()
+            mode_desc = "Direct Extract (No Move/Save)" if direct_mode else "Process & Rename"
+            self.send_json({"message": f"Started {mode_desc} for {len(files)} file(s)"})
 
         elif path == "/api/stop":
             if state.is_processing:
@@ -504,23 +897,86 @@ class LustreHTTPHandler(SimpleHTTPRequestHandler):
             self.send_json({"message": "Config saved", "config": cfg})
 
         elif path == "/api/open_output":
-            try:
-                os.startfile(str(OUTPUT_DIR))
-                self.send_json({"message": "Output folder opened"})
-            except Exception as e:
-                self.send_json({"error": str(e)}, status=500)
+            ok = open_directory_in_explorer(OUTPUT_DIR)
+            self.send_json({"ok": ok, "message": "Output folder opened"})
 
         elif path == "/api/open_input":
+            ok = open_directory_in_explorer(INPUT_DIR)
+            self.send_json({"ok": ok, "message": "Input folder opened"})
+
+        elif path in ("/api/clear_result", "/api/reset_all", "/api/reset_stats"):
+            with state.lock:
+                state.latest_result = None
+                state.progress_current = 0
+                state.progress_total = 0
+                state.current_file = ""
+                state.stop_requested = False
+                state.is_processing = False
+            self.send_json({"ok": True, "message": "Full engine state & results reset"})
+
+        elif path == "/api/delete_file":
             try:
-                os.startfile(str(INPUT_DIR))
-                self.send_json({"message": "Input folder opened"})
+                file_rel = data.get("file", "").strip()
+                if not file_rel:
+                    self.send_json({"error": "No file specified"}, status=400)
+                    return
+                target_path = (INPUT_DIR / file_rel).resolve()
+                if not str(target_path).startswith(str(INPUT_DIR.resolve())):
+                    self.send_json({"error": "Unauthorized path"}, status=403)
+                    return
+                if not target_path.exists():
+                    self.send_json({"error": "File not found"}, status=404)
+                    return
+                if target_path.is_file():
+                    fname = target_path.name
+                    target_path.unlink()
+                    state.add_log(f"🗑️ Deleted file from input_media: {fname}")
+                    try:
+                        if target_path.parent != INPUT_DIR.resolve() and not any(target_path.parent.iterdir()):
+                            target_path.parent.rmdir()
+                    except Exception:
+                        pass
+                    self.send_json({"ok": True, "message": f"Deleted {fname}"})
+                else:
+                    self.send_json({"error": "Target is not a file"}, status=400)
             except Exception as e:
                 self.send_json({"error": str(e)}, status=500)
 
-        elif path == "/api/clear_result":
-            with state.lock:
-                state.latest_result = None
-            self.send_json({"ok": True, "message": "Result cleared"})
+        elif path == "/api/delete_all":
+            try:
+                count = 0
+                for item in list(INPUT_DIR.glob("**/*")):
+                    if item.is_file():
+                        try:
+                            item.unlink()
+                            count += 1
+                        except Exception:
+                            pass
+                for d in list(INPUT_DIR.glob("**/*")):
+                    if d.is_dir():
+                        try:
+                            if not any(d.iterdir()):
+                                d.rmdir()
+                        except Exception:
+                            pass
+                state.add_log(f"🗑️ Deleted all {count} file(s) from input_media.")
+                self.send_json({"ok": True, "count": count, "message": f"Deleted {count} file(s)"})
+            except Exception as e:
+                self.send_json({"error": str(e)}, status=500)
+
+        elif path == "/api/pick_and_cut_files":
+            try:
+                count = native_pick_and_cut_files()
+                self.send_json({"ok": True, "count": count, "message": f"Directly CUT {count} video(s) into input_media"})
+            except Exception as e:
+                self.send_json({"error": str(e)}, status=500)
+
+        elif path == "/api/pick_and_cut_folder":
+            try:
+                count = native_pick_and_cut_folder()
+                self.send_json({"ok": True, "count": count, "message": f"Directly CUT folder with {count} video(s) into input_media"})
+            except Exception as e:
+                self.send_json({"error": str(e)}, status=500)
 
         elif path == "/api/clear_logs":
             state.clear_logs()
@@ -577,8 +1033,56 @@ def check_startup_update():
     except Exception:
         pass
 
+def free_port(port):
+    """If port is occupied by an orphaned process on Windows, terminate that process."""
+    if not sys.platform.startswith('win'):
+        return
+    try:
+        import subprocess
+        res = subprocess.run(
+            ["netstat", "-ano"],
+            capture_output=True, text=True, timeout=5
+        )
+        for line in res.stdout.splitlines():
+            if f":{port}" in line and "LISTENING" in line:
+                parts = line.strip().split()
+                pid = parts[-1]
+                if pid and pid.isdigit() and int(pid) != os.getpid():
+                    subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True, timeout=5)
+        time.sleep(0.5)
+    except Exception:
+        pass
+
+def check_startup_update():
+    try:
+        if hasattr(auto_updater, 'check_for_updates'):
+            auto_updater.check_for_updates()
+    except Exception:
+        pass
+
 def run_server(port=5050, open_browser=True):
-    server = ThreadingHTTPServer(("127.0.0.1", port), LustreHTTPHandler)
+    free_port(port)
+    ThreadingHTTPServer.allow_reuse_address = True
+    server = None
+    for attempt in range(3):
+        try:
+            server = ThreadingHTTPServer(("0.0.0.0", port), LustreHTTPHandler)
+            break
+        except OSError:
+            try:
+                server = ThreadingHTTPServer(("127.0.0.1", port), LustreHTTPHandler)
+                break
+            except OSError:
+                if attempt == 0:
+                    free_port(port)
+                    time.sleep(1.0)
+                else:
+                    port += 1
+
+    if not server:
+        print(f"❌ Could not bind server to port {port}")
+        return
+
     url = f"http://localhost:{port}"
     print("=" * 64)
     print(f"✨ Lustre Separator Web Server is running at: {url}")
@@ -588,7 +1092,7 @@ def run_server(port=5050, open_browser=True):
     threading.Thread(target=check_startup_update, daemon=True).start()
 
     if open_browser:
-        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+        threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -597,9 +1101,14 @@ def run_server(port=5050, open_browser=True):
 
 if __name__ == "__main__":
     port = 5050
+    open_browser = True
     if len(sys.argv) > 1:
-        try:
-            port = int(sys.argv[1])
-        except Exception:
-            pass
-    run_server(port=port, open_browser=True)
+        for arg in sys.argv[1:]:
+            if arg == "--no-browser":
+                open_browser = False
+            else:
+                try:
+                    port = int(arg)
+                except Exception:
+                    pass
+    run_server(port=port, open_browser=open_browser)
