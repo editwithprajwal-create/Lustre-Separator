@@ -36,7 +36,44 @@
                 <div class="brand-meta">
                     <div class="brand-title-row">
                         <h1 class="brand-name">LUSTRE <span class="brand-gradient-text">SEPARATOR</span></h1>
-                        <span class="pro-badge"><span class="badge-dot"></span>STUDIO PRO</span>
+                        <div class="studio-pro-container" id="studioProContainer">
+                            <button type="button" class="pro-badge interactive" id="btnStudioProBadge" title="Studio Pro • Click for API Key & Version">
+                                <span class="badge-dot" id="studioProDot"></span>
+                                <span class="pro-text">STUDIO PRO</span>
+                                <span class="pro-version-badge" id="studioProVersionText">v2.4.0</span>
+                                <i class="fa-solid fa-chevron-down pro-chevron"></i>
+                            </button>
+
+                            <!-- Studio Pro Dropdown Popover Menu -->
+                            <div class="studio-pro-menu" id="studioProMenu">
+                                <div class="sp-menu-header">
+                                    <div class="sp-title-line">
+                                        <span class="sp-menu-title"><i class="fa-solid fa-shield-halved text-cyan"></i> Studio Pro Suite</span>
+                                        <span class="sp-version-pill" id="spMenuVersionBadge">v2.4.0</span>
+                                    </div>
+                                    <span class="sp-update-hint" id="spUpdateHint">✅ Latest build installed</span>
+                                </div>
+                                <div class="sp-menu-body">
+                                    <button type="button" class="sp-menu-btn" id="btnOpenSettings">
+                                        <div class="sp-btn-icon cyan"><i class="fa-solid fa-key"></i></div>
+                                        <div class="sp-btn-text">
+                                            <span class="sp-btn-title">Gemini API Key</span>
+                                            <span class="sp-btn-desc">Configure or change AI key</span>
+                                        </div>
+                                        <i class="fa-solid fa-chevron-right sp-btn-arrow"></i>
+                                    </button>
+                                    
+                                    <button type="button" class="sp-menu-btn" id="btnStudioMenuUpdate">
+                                        <div class="sp-btn-icon emerald" id="spMenuUpdateIcon"><i class="fa-solid fa-cloud-arrow-down"></i></div>
+                                        <div class="sp-btn-text">
+                                            <span class="sp-btn-title">Auto-Updater</span>
+                                            <span class="sp-btn-desc" id="spMenuUpdateDesc">Check & pull latest updates</span>
+                                        </div>
+                                        <span class="sp-badge-update" id="spBadgeUpdate" style="display:none;">Update</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <p class="brand-tagline">Gemini Vision AI Engine • Sequential Media Renamer • Pure English SEO</p>
                 </div>
@@ -56,15 +93,6 @@
                     <span>Done: <strong id="statProcessedCount" class="text-emerald">0</strong></span>
                 </div>
 
-                <!-- Version & Auto-Update Indicator -->
-                <div class="version-updater-pill" id="versionUpdaterPill" title="Click to view update details">
-                    <span class="version-pulse-dot" id="versionDot"></span>
-                    <span id="versionLabel">v2.4.0</span>
-                    <button id="btnQuickUpdate" class="quick-update-btn" style="display:none;" title="One-Click Git Pull Update">
-                        <i class="fa-solid fa-cloud-arrow-down"></i> <span>Update</span>
-                    </button>
-                </div>
-
                 <div class="action-btn-group">
                     <button id="btnOpenInputFolder" class="glass-header-btn" title="Open Input Media Folder">
                         <i class="fa-regular fa-folder-open"></i>
@@ -73,10 +101,6 @@
                     <button id="btnOpenOutputFolder" class="glass-header-btn" title="Open Output Media Folder">
                         <i class="fa-solid fa-folder-tree"></i>
                         <span>Output</span>
-                    </button>
-                    <button id="btnOpenSettings" class="glass-header-btn primary-glow-btn" title="Configure API Key">
-                        <i class="fa-solid fa-key"></i>
-                        <span>API Key</span>
                     </button>
                 </div>
             </div>

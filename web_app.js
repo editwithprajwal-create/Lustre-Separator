@@ -55,6 +55,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const inputApiKey = document.getElementById('inputApiKey');
     const btnSaveApiKey = document.getElementById('btnSaveApiKey');
 
+    // Studio Pro Menu Elements
+    const studioProContainer = document.getElementById('studioProContainer');
+    const btnStudioProBadge = document.getElementById('btnStudioProBadge');
+    const studioProMenu = document.getElementById('studioProMenu');
+    const studioProDot = document.getElementById('studioProDot');
+    const studioProVersionText = document.getElementById('studioProVersionText');
+    const spMenuVersionBadge = document.getElementById('spMenuVersionBadge');
+    const spUpdateHint = document.getElementById('spUpdateHint');
+    const btnStudioMenuUpdate = document.getElementById('btnStudioMenuUpdate');
+    const spBadgeUpdate = document.getElementById('spBadgeUpdate');
+    const spMenuUpdateDesc = document.getElementById('spMenuUpdateDesc');
+
     // Auto-Updater Elements
     const versionUpdaterPill = document.getElementById('versionUpdaterPill');
     const versionLabel = document.getElementById('versionLabel');
@@ -586,8 +598,36 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Studio Pro Menu Toggle & Interactions
+    if (btnStudioProBadge && studioProMenu) {
+        btnStudioProBadge.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = studioProMenu.classList.toggle('show');
+            if (studioProContainer) studioProContainer.classList.toggle('open', isOpen);
+        });
+
+        document.addEventListener('click', (e) => {
+            if (studioProContainer && !studioProContainer.contains(e.target)) {
+                studioProMenu.classList.remove('show');
+                studioProContainer.classList.remove('open');
+            }
+        });
+    }
+
+    if (btnStudioMenuUpdate) {
+        btnStudioMenuUpdate.addEventListener('click', () => {
+            if (studioProMenu) studioProMenu.classList.remove('show');
+            if (studioProContainer) studioProContainer.classList.remove('open');
+            if (btnOpenSettings) btnOpenSettings.click();
+            if (tabSettingsUpdater) tabSettingsUpdater.click();
+        });
+    }
+
     // Settings Modal
     btnOpenSettings.addEventListener('click', async () => {
+        if (studioProMenu) studioProMenu.classList.remove('show');
+        if (studioProContainer) studioProContainer.classList.remove('open');
+        if (tabSettingsApi) tabSettingsApi.click();
         try {
             const res = await fetch('/api/config');
             const cfg = await res.json();
@@ -673,6 +713,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (data.update_available) {
                 const count = data.behind_count || 1;
+                if (btnStudioProBadge) btnStudioProBadge.classList.add('has-update');
+                if (studioProVersionText) studioProVersionText.textContent = `Update (${count})`;
+                if (spUpdateHint) spUpdateHint.textContent = `🚀 ${count} new update(s) ready!`;
+                if (spBadgeUpdate) spBadgeUpdate.style.display = 'inline-block';
+                if (spMenuUpdateDesc) spMenuUpdateDesc.textContent = `${count} commit(s) ready to pull`;
+
                 if (versionUpdaterPill) versionUpdaterPill.classList.add('update-ready');
                 if (versionLabel) versionLabel.textContent = `🚀 Update (${count})`;
                 if (btnQuickUpdate) btnQuickUpdate.style.display = 'inline-flex';
@@ -697,6 +743,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     showToast(`🚀 ${count} new update(s) found! Click 'Update Now' to apply.`);
                 }
             } else {
+                if (btnStudioProBadge) btnStudioProBadge.classList.remove('has-update');
+                if (studioProVersionText) studioProVersionText.textContent = `v${data.current_version || '2.4.0'}`;
+                if (spMenuVersionBadge) spMenuVersionBadge.textContent = `v${data.current_version || '2.4.0'}`;
+                if (spUpdateHint) spUpdateHint.textContent = '✅ Latest build installed';
+                if (spBadgeUpdate) spBadgeUpdate.style.display = 'none';
+                if (spMenuUpdateDesc) spMenuUpdateDesc.textContent = 'Check & pull latest updates';
+
                 if (versionUpdaterPill) versionUpdaterPill.classList.remove('update-ready');
                 if (versionLabel) versionLabel.textContent = `v${data.current_version || '2.4.0'}`;
                 if (btnQuickUpdate) btnQuickUpdate.style.display = 'none';
