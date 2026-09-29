@@ -1100,8 +1100,9 @@ def run_server(port=5050, open_browser=True):
         server.shutdown()
 
 if __name__ == "__main__":
-    port = 5050
-    open_browser = True
+    env_port = os.environ.get("PORT")
+    port = int(env_port) if env_port else 5050
+    open_browser = False if env_port else True
     if len(sys.argv) > 1:
         for arg in sys.argv[1:]:
             if arg == "--no-browser":
