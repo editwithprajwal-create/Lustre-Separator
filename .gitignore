@@ -1,0 +1,29 @@
+# Protect user private configuration & Gemini API key
+config.json
+
+# User media folders
+input_media/*
+!input_media/.gitkeep
+output_media/*
+!output_media/.gitkeep
+
+# Python cache & virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+env/
+venv/
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+!Lustre Separator.spec
+
+# OS & IDE files
+.DS_Store
+Thumbs.db
+*.log
+scratch/

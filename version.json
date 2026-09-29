@@ -1,0 +1,7 @@
+{
+    "version": "2.4.0",
+    "app_name": "Lustre Separator",
+    "release_date": "2026-09-29",
+    "channel": "stable",
+    "auto_check": true
+}

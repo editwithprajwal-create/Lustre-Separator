@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✨ Lustre Separator - AI Video SEO & Media Organizer</title>
+    <link rel="icon" type="image/png" href="assets/logo.png">
+    
+    <!-- Google Fonts: Outfit (Display & Headings) + Plus Jakarta Sans (Clean Modern UI) + JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome 6.5.1 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dark-theme">
+    <!-- Dynamic Ambient Nebula Glow Background -->
+    <div class="nebula-bg" aria-hidden="true">
+        <div class="glow-orb orb-1"></div>
+        <div class="glow-orb orb-2"></div>
+        <div class="glow-orb orb-3"></div>
+        <div class="cosmic-grid"></div>
+        <div class="radial-vignette"></div>
+    </div>
+
+    <!-- Main Navigation Header -->
+    <header class="app-header">
+        <div class="header-inner">
+            <div class="brand">
+                <div class="brand-logo-frame">
+                    <img src="assets/logo.png" alt="Lustre Separator Logo" class="brand-logo-img">
+                    <div class="rotating-halo"></div>
+                </div>
+                <div class="brand-meta">
+                    <div class="brand-title-row">
+                        <h1 class="brand-name">LUSTRE <span class="brand-gradient-text">SEPARATOR</span></h1>
+                        <span class="pro-badge"><span class="badge-dot"></span>STUDIO PRO</span>
+                    </div>
+                    <p class="brand-tagline">Gemini Vision AI Engine • Sequential Media Renamer • Pure English SEO</p>
+                </div>
+            </div>
+
+            <!-- Header Quick Stats & Controls -->
+            <div class="header-nav-actions">
+                <div class="live-engine-pill">
+                    <span class="radar-pulse"></span>
+                    <span class="engine-label">Gemini Vision: <strong class="engine-status">ONLINE</strong></span>
+                </div>
+
+                <div class="queue-counter-pill">
+                    <i class="fa-solid fa-layer-group text-cyan"></i>
+                    <span>Queue: <strong id="statTotalVideos">0</strong></span>
+                    <span class="pill-sep">•</span>
+                    <span>Done: <strong id="statProcessedCount" class="text-emerald">0</strong></span>
+                </div>
+
+                <!-- Version & Auto-Update Indicator -->
+                <div class="version-updater-pill" id="versionUpdaterPill" title="Click to view update details">
+                    <span class="version-pulse-dot" id="versionDot"></span>
+                    <span id="versionLabel">v2.4.0</span>
+                    <button id="btnQuickUpdate" class="quick-update-btn" style="display:none;" title="One-Click Git Pull Update">
+                        <i class="fa-solid fa-cloud-arrow-down"></i> <span>Update</span>
+                    </button>
+                </div>
+
+                <div class="action-btn-group">
+                    <button id="btnOpenInputFolder" class="glass-header-btn" title="Open Input Media Folder">
+                        <i class="fa-regular fa-folder-open"></i>
+                        <span>Input</span>
+                    </button>
+                    <button id="btnOpenOutputFolder" class="glass-header-btn" title="Open Output Media Folder">
+                        <i class="fa-solid fa-folder-tree"></i>
+                        <span>Output</span>
+                    </button>
+                    <button id="btnOpenSettings" class="glass-header-btn primary-glow-btn" title="Configure API Key">
+                        <i class="fa-solid fa-key"></i>
+                        <span>API Key</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- App Body Layout -->
+    <main class="app-workspace">
+        
+        <!-- Control Deck: Platform Switcher & High-Impact Action Bar -->
+        <section class="control-deck">
+            <div class="deck-left">
+                <div class="platform-selector-wrap">
+                    <span class="deck-label"><i class="fa-solid fa-satellite-dish text-cyan"></i> Target Destination:</span>
+                    <div class="platform-segmented-control" id="platformSelectorGroup">
+                        <button type="button" class="platform-chip active" data-platform="facebook">
+                            <i class="fa-brands fa-facebook"></i> <span>Facebook</span>
+                        </button>
+                        <button type="button" class="platform-chip" data-platform="instagram">
+                            <i class="fa-brands fa-instagram"></i> <span>Instagram Reels</span>
+                        </button>
+                        <button type="button" class="platform-chip" data-platform="tiktok">
+                            <i class="fa-brands fa-tiktok"></i> <span>TikTok</span>
+                        </button>
+                        <button type="button" class="platform-chip" data-platform="youtube">
+                            <i class="fa-brands fa-youtube"></i> <span>YouTube Shorts</span>
+                        </button>
+                    </div>
+                    <select id="platformSelect" class="hidden-select" style="display:none;">
+                        <option value="facebook" selected>facebook</option>
+                        <option value="instagram">instagram</option>
+                        <option value="tiktok">tiktok</option>
+                        <option value="youtube">youtube</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="deck-right">
+                <!-- Master Launch Button with Shimmer Sweep -->
+                <button id="btnProcessAll" class="hero-launch-btn" title="Upload all videos directly to Gemini AI and organize into numbered folders">
+                    <div class="btn-ambient-glow"></div>
+                    <div class="hero-btn-content">
+                        <div class="hero-icon-pulse"><i class="fa-solid fa-bolt-lightning"></i></div>
+                        <div class="hero-text-block">
+                            <span class="hero-btn-title">PROCESS & RENAME ALL</span>
+                            <span class="hero-btn-sub">Renames to 1.mp4, 2.mp4 & writes captions</span>
+                        </div>
+                    </div>
+                    <div class="shimmer-sweep"></div>
+                </button>
+
+                <button id="btnProcessSelected" class="secondary-action-btn" disabled title="Process currently selected video">
+                    <i class="fa-solid fa-play"></i>
+                    <span>Process Selected</span>
+                </button>
+
+                <button id="btnStop" class="stop-action-btn" disabled title="Cancel analysis immediately">
+                    <i class="fa-solid fa-hand"></i>
+                    <span>Stop</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Main Workspace Dual Column -->
+        <div class="workspace-grid">
+            
+            <!-- Left Panel: Video Files Manager -->
+            <section class="luxury-card files-deck">
+                <div class="card-header-bar">
+                    <div class="card-header-left">
+                        <div class="header-icon-box"><i class="fa-solid fa-film"></i></div>
+                        <div>
+                            <h2 class="card-title">Media Queue</h2>
+                            <p class="card-subtitle">Drop files or folders here or manage <code>input_media/</code></p>
+                        </div>
+                    </div>
+                    <div class="card-header-actions">
+                        <input type="file" id="filePickerInput" multiple accept="video/*,image/*" style="display:none;">
+                        <input type="file" id="folderPickerInput" webkitdirectory directory multiple style="display:none;">
+                        <button id="btnAddFiles" class="mini-tool-btn" title="Add individual video files">
+                            <i class="fa-solid fa-file-video"></i> <span>+ Videos</span>
+                        </button>
+                        <button id="btnAddFolder" class="mini-tool-btn" title="Add an entire folder with videos">
+                            <i class="fa-solid fa-folder-plus"></i> <span>+ Folder</span>
+                        </button>
+                        <button id="btnRefreshFiles" class="icon-refresh-btn" title="Refresh files from folder">
+                            <i class="fa-solid fa-rotate"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Drop Banner Hint -->
+                <div class="deck-drop-banner" id="deckDropBanner">
+                    <div class="drop-banner-content">
+                        <i class="fa-solid fa-cloud-arrow-up text-cyan"></i>
+                        <span>Drag &amp; Drop <strong>Videos</strong> or entire <strong>Folders</strong> anywhere</span>
+                    </div>
+                </div>
+
+                <div class="files-scroll-area" id="filesListContainer">
+                    <div class="empty-media-state" id="emptyFilesState">
+                        <div class="empty-media-graphic">
+                            <div class="floating-film-icon"><i class="fa-solid fa-clapperboard"></i></div>
+                            <div class="graphic-rings"></div>
+                        </div>
+                        <h3>No Media In Queue</h3>
+                        <p>Drag &amp; drop your video files or folders here, or click below to upload.</p>
+                        <div class="empty-cta-group">
+                            <button class="empty-cta-btn" id="btnEmptyAddFiles">
+                                <i class="fa-solid fa-file-video"></i> Drop / Pick Videos
+                            </button>
+                            <button class="empty-cta-btn secondary" id="btnEmptyAddFolder">
+                                <i class="fa-solid fa-folder-plus"></i> Drop / Pick Folder
+                            </button>
+                            <button class="empty-cta-btn ghost" onclick="document.getElementById('btnOpenInputFolder').click()">
+                                <i class="fa-regular fa-folder-open"></i> Open input_media
+                            </button>
+                        </div>
+                    </div>
+                    <div class="files-grid-list" id="filesList"></div>
+                </div>
+
+                <div class="files-deck-footer">
+                    <div class="selection-pill" id="selectionSummary">
+                        <i class="fa-solid fa-circle-info"></i>
+                        <span>No video selected</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Panel: Live AI Monitor & Result Preview Studio -->
+            <section class="monitor-deck">
+                
+                <!-- Live AI Processing Tracker Card with Hologram Waveform -->
+                <div class="luxury-card tracker-card" id="trackerCard">
+                    <div class="tracker-top">
+                        <div class="tracker-status-meta">
+                            <span class="status-badge" id="statusBadge">IDLE</span>
+                            <span class="tracker-task-label" id="progressCurrentStatus">Ready for video analysis.</span>
+                        </div>
+                        
+                        <div class="tracker-right-group">
+                            <!-- Dynamic Audio/Vision Waveform Visualizer -->
+                            <div class="ai-visualizer" id="aiVisualizer">
+                                <span class="wave-bar wb-1"></span>
+                                <span class="wave-bar wb-2"></span>
+                                <span class="wave-bar wb-3"></span>
+                                <span class="wave-bar wb-4"></span>
+                                <span class="wave-bar wb-5"></span>
+                                <span class="wave-bar wb-6"></span>
+                                <span class="wave-bar wb-7"></span>
+                            </div>
+                            <div class="tracker-counter" id="progressCounter">0 / 0</div>
+                        </div>
+                    </div>
+
+                    <div class="neon-progress-rail">
+                        <div class="neon-progress-fill" id="progressBarFill" style="width: 0%;">
+                            <span class="progress-laser-tip"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Studio Output Showcase Card -->
+                <div class="luxury-card output-showcase-card" id="outputShowcase">
+                    
+                    <div class="showcase-header-bar">
+                        <div class="showcase-brand">
+                            <div class="sparkle-icon-frame"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                            <div>
+                                <h3 class="showcase-title">AI Social Media Package</h3>
+                                <p class="showcase-subtitle">Pure Story Caption & Viral Hashtags ready for instant posting</p>
+                            </div>
+                        </div>
+
+                        <!-- Studio View Mode Switcher -->
+                        <div class="view-mode-tabs">
+                            <button type="button" class="view-tab active" id="tabEditorView">
+                                <i class="fa-solid fa-pen-nib"></i> Editor View
+                            </button>
+                            <button type="button" class="view-tab" id="tabMobileView">
+                                <i class="fa-solid fa-mobile-screen"></i> Feed Simulator
+                            </button>
+                        </div>
+
+                        <div class="showcase-header-actions">
+                            <button id="btnClearResult" class="showcase-clear-btn" title="Clear current caption and hashtags">
+                                <i class="fa-solid fa-trash-can"></i> <span>Clear</span>
+                            </button>
+                            <button id="btnCopyResult" class="master-copy-btn" title="Copy clean caption and hashtags to clipboard">
+                                <i class="fa-regular fa-clone"></i> <span>Copy Caption & Hashtags</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Mode 1: Editor View -->
+                    <div class="showcase-body" id="editorViewContainer">
+                        
+                        <!-- Legacy Hook Box (Hidden for clean format) -->
+                        <div class="output-section-card hook-card" style="display:none;">
+                            <div class="section-card-header">
+                                <span class="section-pill section-pill-hook">🎯 VIRAL HOOK</span>
+                                <button class="btn-copy-chip" id="btnCopyHook" title="Copy Hook"><i class="fa-regular fa-copy"></i></button>
+                            </div>
+                            <div class="section-card-content" id="hookDisplay">
+                                Awaiting video analysis...
+                            </div>
+                        </div>
+
+                        <!-- Story Caption Box -->
+                        <div class="output-section-card caption-box-card">
+                            <div class="section-card-header">
+                                <div class="section-header-left">
+                                    <span class="section-pill section-pill-caption">
+                                        <i class="fa-solid fa-align-left"></i> VIRAL CAPTION
+                                    </span>
+                                    <span class="meta-stats-chip" id="captionStatsBadge">0 chars • 0 words</span>
+                                </div>
+                                <div class="section-header-actions">
+                                    <button class="action-clear-chip" id="btnClearCaption" title="Clear Caption">
+                                        <i class="fa-solid fa-trash-can"></i> <span>Clear</span>
+                                    </button>
+                                    <button class="action-copy-chip" id="btnCopyCaption" title="Copy Caption">
+                                        <i class="fa-regular fa-copy"></i> <span>Copy Caption</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="caption-text-viewport" id="captionDisplay" contenteditable="true" spellcheck="false" title="Click to edit caption directly">
+                                Story-driven caption in fluent English with context & emojis will appear here after analysis...
+                            </div>
+                        </div>
+
+                        <!-- Hashtags Cloud Box -->
+                        <div class="output-section-card tags-box-card">
+                            <div class="section-card-header">
+                                <div class="section-header-left">
+                                    <span class="section-pill section-pill-tags">
+                                        <i class="fa-solid fa-hashtag"></i> VIRAL HASHTAGS
+                                    </span>
+                                    <span class="meta-stats-chip" id="tagsCountBadge">20 tags</span>
+                                </div>
+                                <div class="section-header-actions">
+                                    <button class="action-clear-chip" id="btnClearTags" title="Clear Hashtags">
+                                        <i class="fa-solid fa-trash-can"></i> <span>Clear</span>
+                                    </button>
+                                    <button class="action-copy-chip" id="btnCopyTags" title="Copy Hashtags">
+                                        <i class="fa-regular fa-copy"></i> <span>Copy All Tags</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="tags-cloud-viewport" id="tagsDisplay">
+                                <span class="tag-chip">#LustreSeparator</span>
+                                <span class="tag-chip">#ViralVideo</span>
+                                <span class="tag-chip">#TrendingNow</span>
+                                <span class="tag-chip">#WholesomeMoments</span>
+                                <span class="tag-chip">#Reels</span>
+                                <span class="tag-chip">#ExplorePage</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mode 2: Live Mobile Phone Post Simulator -->
+                    <div class="mobile-simulator-view" id="mobileViewContainer" style="display:none;">
+                        <div class="phone-frame">
+                            <div class="phone-notch"><span class="notch-speaker"></span><span class="notch-cam"></span></div>
+                            <div class="phone-screen">
+                                <div class="sim-post-header">
+                                    <div class="sim-user-avatar"><i class="fa-solid fa-user-astronaut"></i></div>
+                                    <div class="sim-user-meta">
+                                        <span class="sim-username">your_channel_name <i class="fa-solid fa-circle-check text-cyan"></i></span>
+                                        <span class="sim-location">Original Audio • Sponsored</span>
+                                    </div>
+                                    <button class="sim-menu-btn"><i class="fa-solid fa-ellipsis"></i></button>
+                                </div>
+
+                                <div class="sim-video-placeholder">
+                                    <div class="sim-play-circle"><i class="fa-solid fa-play"></i></div>
+                                    <span class="sim-video-label" id="simVideoLabel">Video Preview Area</span>
+                                </div>
+
+                                <div class="sim-interaction-bar">
+                                    <div class="sim-left-actions">
+                                        <i class="fa-solid fa-heart text-rose"></i>
+                                        <i class="fa-regular fa-comment"></i>
+                                        <i class="fa-regular fa-paper-plane"></i>
+                                    </div>
+                                    <i class="fa-regular fa-bookmark"></i>
+                                </div>
+
+                                <div class="sim-likes-count">❤️ 12.4K likes</div>
+
+                                <div class="sim-caption-scroll">
+                                    <span class="sim-caption-user">your_channel_name</span>
+                                    <span class="sim-caption-body" id="simCaptionBody">Your caption and hashtags will preview here in real mobile social feed format!</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hidden raw store for copying -->
+                    <pre id="resultContent" style="display:none;"></pre>
+                </div>
+
+                <!-- Collapsible Live Cloud Activity Logs -->
+                <div class="luxury-card console-box" id="consoleBox">
+                    <div class="console-top-bar">
+                        <div class="terminal-dots">
+                            <span class="t-dot dot-red"></span>
+                            <span class="t-dot dot-yellow"></span>
+                            <span class="t-dot dot-green"></span>
+                        </div>
+                        <span class="console-title"><i class="fa-solid fa-terminal text-cyan"></i> Live Gemini Cloud Neural Execution Log</span>
+                        <div class="console-tools">
+                            <button id="btnClearConsole" class="mini-console-btn" title="Clear console">Clear</button>
+                            <button id="btnToggleLogs" class="mini-console-btn" title="Toggle Log view">
+                                <i class="fa-solid fa-chevron-down"></i> Logs
+                            </button>
+                        </div>
+                    </div>
+                    <div class="console-scroll-viewport" id="terminalLogBox">
+                        <div class="log-line system">[00:00:00] ✨ Lustre Separator Studio Online. Gemini 3.8 Flash Vision Ready.</div>
+                    </div>
+                </div>
+
+            </section>
+        </div>
+    </main>
+
+    <!-- Modal: Settings & Git Auto-Updater -->
+    <div class="modal-backdrop" id="settingsModal">
+        <div class="modal-card settings-modal-card">
+            <div class="modal-card-header">
+                <div class="modal-brand">
+                    <img src="assets/logo.png" alt="Logo" class="modal-logo-small">
+                    <h3>Application Settings &amp; Updates</h3>
+                </div>
+                <button class="modal-close-btn" id="btnCloseSettings"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <!-- Settings Tabs -->
+            <div class="settings-nav-tabs">
+                <button type="button" class="settings-nav-tab active" id="tabSettingsApi">
+                    <i class="fa-solid fa-key"></i> Gemini API Key
+                </button>
+                <button type="button" class="settings-nav-tab" id="tabSettingsUpdater">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> Auto-Updater
+                    <span class="tab-update-dot" id="tabUpdateDot" style="display:none;"></span>
+                </button>
+            </div>
+
+            <!-- Tab 1: API Key -->
+            <div class="settings-tab-pane active" id="paneSettingsApi">
+                <div class="modal-card-body">
+                    <label for="inputApiKey" class="input-label">Gemini API Key (Google AI Studio):</label>
+                    <div class="input-glow-wrapper">
+                        <i class="fa-solid fa-key input-icon"></i>
+                        <input type="password" id="inputApiKey" class="input-control" placeholder="AIzaSy... or AQ.Ab8RN...">
+                    </div>
+                    <div class="modal-notice">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        <span>Your key is stored securely in <code>config.json</code> and used strictly for video analysis via Google Gemini API.</span>
+                    </div>
+                    <p class="modal-link-row">
+                        Get your free key at: 
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                    </p>
+                </div>
+                <div class="modal-card-footer">
+                    <button id="btnSaveApiKey" class="modal-save-btn">
+                        <i class="fa-solid fa-check"></i> Save &amp; Connect Key
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tab 2: Auto-Updater -->
+            <div class="settings-tab-pane" id="paneSettingsUpdater">
+                <div class="modal-card-body">
+                    <div class="updater-status-card">
+                        <div class="updater-info-row">
+                            <span class="updater-info-label">Installed Version:</span>
+                            <span class="updater-badge version" id="modalVersionBadge">v2.4.0 (Stable)</span>
+                        </div>
+                        <div class="updater-info-row">
+                            <span class="updater-info-label">Git Status:</span>
+                            <span class="updater-badge git" id="modalGitStatus">Checking...</span>
+                        </div>
+                        <div class="updater-info-row">
+                            <span class="updater-info-label">Update Status:</span>
+                            <span class="updater-badge status" id="modalUpdateStatus">Ready to check</span>
+                        </div>
+                    </div>
+
+                    <!-- Git Remote Configuration -->
+                    <div class="git-config-section">
+                        <label for="inputGitRemote" class="input-label">Git Remote URL (Repository):</label>
+                        <div class="input-with-action">
+                            <input type="text" id="inputGitRemote" class="input-control" placeholder="https://github.com/your-username/repo.git">
+                            <button id="btnConnectGit" class="secondary-chip-btn" title="Link or update Git Remote">
+                                <i class="fa-solid fa-link"></i> Link
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Update Commits Log Area -->
+                    <div class="update-log-area" id="updateLogArea" style="display:none;">
+                        <span class="update-log-title"><i class="fa-solid fa-code-commit text-cyan"></i> New Commits / Changes:</span>
+                        <div class="commits-list-box" id="commitsListBox"></div>
+                    </div>
+                </div>
+
+                <div class="modal-card-footer updater-footer">
+                    <button id="btnCheckUpdateModal" class="modal-check-btn">
+                        <i class="fa-solid fa-rotate"></i> <span>Check for Updates</span>
+                    </button>
+                    <button id="btnPerformUpdate" class="modal-update-btn" disabled>
+                        <i class="fa-solid fa-cloud-arrow-down"></i> <span>Update Now (Git Pull)</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Luxury Toast Notification -->
+    <div id="toast" class="toast-card">
+        <div class="toast-glow"></div>
+        <i class="fa-solid fa-circle-check toast-icon"></i>
+        <span id="toastMsg" class="toast-text">Notification</span>
+    </div>
+
+    <!-- Drag & Drop Fullscreen Luxury Overlay -->
+    <div class="drop-overlay-backdrop" id="dropOverlay">
+        <div class="drop-target-box">
+            <div class="drop-glow-ring"></div>
+            <div class="drop-floating-icons">
+                <i class="fa-solid fa-folder-open icon-folder"></i>
+                <i class="fa-solid fa-arrow-right-arrow-left icon-link"></i>
+                <i class="fa-solid fa-film icon-video"></i>
+            </div>
+            <h2 class="drop-heading">Drop Videos &amp; Folders Here</h2>
+            <p class="drop-sub">Release mouse to automatically upload into <code>input_media/</code> queue</p>
+            <div class="drop-badges">
+                <span class="drop-badge"><i class="fa-solid fa-folder-tree"></i> Entire Folders</span>
+                <span class="drop-badge"><i class="fa-solid fa-file-video"></i> MP4 / MOV / MKV / AVI</span>
+                <span class="drop-badge"><i class="fa-solid fa-bolt"></i> Instant Queue Detection</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Progress Modal -->
+    <div class="modal-backdrop upload-modal-backdrop" id="uploadModal">
+        <div class="modal-card upload-modal-card">
+            <div class="upload-modal-header">
+                <div class="upload-icon-pulse"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+                <div>
+                    <h3 id="uploadModalTitle">Uploading Media to Queue...</h3>
+                    <p class="upload-modal-sub" id="uploadModalSub">Transferring files to input_media</p>
+                </div>
+            </div>
+            <div class="upload-progress-wrapper">
+                <div class="upload-progress-info">
+                    <span id="uploadFileName">filename.mp4</span>
+                    <span id="uploadCountBadge">1 / 1</span>
+                </div>
+                <div class="upload-progress-bar-bg">
+                    <div class="upload-progress-bar-fill" id="uploadBarFill" style="width: 0%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="web_app.js"></script>
+</body>
+</html>
