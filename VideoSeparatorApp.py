@@ -103,6 +103,79 @@ def clean_ai_output(raw_text):
     result = re.sub(r'\n{3,}', '\n\n', result)
     return result
 
+def split_caption_and_hashtags(text):
+    if not text:
+        return "", ""
+    hashtags = re.findall(r'#\w+', text)
+    caption_part = re.sub(r'#\w+', '', text)
+    caption_part = re.sub(r'[\r\n\t]+', ' ', caption_part)
+    caption_part = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', caption_part)
+    caption_part = re.sub(r'\s+', ' ', caption_part).strip().rstrip('. ')
+    hashtag_str = ' '.join(hashtags)
+    return caption_part, hashtag_str
+
+def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=240):
+    ext = ext.lower() if ext else ".mp4"
+    if not ext.startswith("."):
+        ext = "." + ext
+
+    caption, hashtags = split_caption_and_hashtags(ai_text)
+
+    if not caption and not hashtags:
+        base_name = fallback_stem
+    elif not hashtags:
+        base_name = caption
+    elif not caption:
+        base_name = hashtags
+    else:
+        candidate = f"{caption} {hashtags}"
+        if len(candidate) <= max_len:
+            base_name = candidate
+        else:
+            selected_tags = []
+            tag_len = 0
+            for tag in hashtags.split():
+                if tag_len + len(tag) + 1 <= 85:
+                    selected_tags.append(tag)
+                    tag_len += len(tag) + 1
+                else:
+                    break
+            tag_part = ' '.join(selected_tags)
+            avail_for_caption = max_len - len(tag_part) - 1
+            if len(caption) > avail_for_caption:
+                truncated = caption[:avail_for_caption]
+                last_space = truncated.rfind(' ')
+                if last_space > avail_for_caption // 2:
+                    caption_part = truncated[:last_space].rstrip('. ')
+                else:
+                    caption_part = truncated.rstrip('. ')
+            else:
+                caption_part = caption
+            base_name = f"{caption_part} {tag_part}".strip()
+
+    base_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', base_name).strip().rstrip('. ')
+    if len(base_name) > max_len:
+        base_name = base_name[:max_len].rstrip('. ')
+    if not base_name:
+        base_name = fallback_stem
+
+    candidate_name = f"{base_name}{ext}"
+    if target_folder is None:
+        return candidate_name
+
+    tf = Path(target_folder)
+    if not tf.exists() or not (tf / candidate_name).exists():
+        return candidate_name
+
+    counter = 1
+    while True:
+        tag = f" ({counter})"
+        trimmed_base = base_name[:(max_len - len(tag))].rstrip('. ')
+        new_name = f"{trimmed_base}{tag}{ext}"
+        if not (tf / new_name).exists():
+            return new_name
+        counter += 1
+
 def get_next_available_index(target_folder):
     """Finds the next unused sequential index (1, 2, 3...) inside target_folder."""
     target_folder.mkdir(parents=True, exist_ok=True)
@@ -924,13 +997,11 @@ class VideoSeparatorGUI:
             ext = media_path.suffix.lower()
             target_folder = OUTPUT_DIR / folder_name
             target_folder.mkdir(parents=True, exist_ok=True)
-            video_index = get_next_available_index(target_folder)
-            renamed_filename = f"{video_index}{ext}"
 
             self.log(f"\n==========================================")
             self.log(f"[{i}/{total_files}] 🎬 {media_path.name}")
             self.log(f"   📁 Folder Name (Unchanged): {folder_name}/")
-            self.log(f"   🎥 Renaming Video to: {renamed_filename}")
+            self.log("   🎥 Video will be renamed with Caption & Hashtags")
             self.msg_queue.put(("status", f"[{i}/{total_files}] Uploading {media_path.name} to Gemini..."))
 
             uploaded_file = None
@@ -985,9 +1056,9 @@ EXACT FORMAT TO FOLLOW:
 #Hashtag1 #Hashtag2 #Hashtag3 #Hashtag4 #Hashtag5 ... (15-20 viral, trending hashtags for {platform.upper()})
 
 EXAMPLE:
-This baby keeps tapping on the rainy window… while the African Grey parrot watches every move from behind. 😂🦜👶 Then the baby turns around with the BIGGEST smile like they’ve been caught! ❤️
+She walks into the house with her suitcase and paperwork… and within seconds the entire family confrontation explodes. 😳📄💔 Accusations fly, everyone gets pulled into the argument, and by the end one person is left standing there as the others walk away. Family drama just got REAL. 👀🔥
 
-#TalkingParrot #AfricanGrey #BabyAndParrot #FunnyBaby #CuteBaby #FunnyParrot #ParrotLife #CuteAnimals #WholesomeMoments #FunnyReels #ViralReels #MustWatch
+#FamilyDrama #FamilyConflict #FamilySecrets #RelationshipDrama #EmotionalStory #FamilyChaos #DramaReels #UnexpectedTruth #StoryTime #EmotionalDrama #ViralReels #MustWatch
 
 CRITICAL RULES:
 - EVERYTHING MUST be written strictly in 100% FLUENT ENGLISH ONLY.
@@ -1037,8 +1108,19 @@ CRITICAL RULES:
                 self.msg_queue.put(("finished", "🛑 Analysis बीचमै रोकियो। बाँकी फाइलहरू सुरक्षित छन्।"))
                 return
 
-            # Strictly CUT & Move media from input_media to output_media
+            # Fallback if Gemini failed so user never gets blank file
+            if not ai_output:
+                ai_output = f"""An unexpected and emotional moment caught on camera! Watch closely as the story unfolds with the biggest smile. What would your reaction be in this situation? Let us know your thoughts in the comments below! 👇💬❤️
+
+#Viral #Trending #MustWatch #VideoOfTheDay #StoryTime #ExplorePage #FYP #Reels #CuteAnimals #WholesomeMoments #FunnyReels #ViralReels #{platform.capitalize()}Watch #Entertainment"""
+            else:
+                ai_output = clean_ai_output(ai_output)
+
+            # Generate video filename directly from AI Caption + Hashtags (zero .txt file)
+            renamed_filename = generate_video_filename(ai_output, ext, target_folder, fallback_stem=media_path.stem)
             target_media = target_folder / renamed_filename
+
+            # Strictly CUT & Move media from input_media to output_media
             safe_move_file(media_path, target_media)
             if media_path.exists():
                 try:
@@ -1059,27 +1141,18 @@ CRITICAL RULES:
                 except Exception:
                     pass
 
-            # Fallback if Gemini failed so user never gets blank file
-            if not ai_output:
-                ai_output = f"""An unexpected and emotional moment caught on camera! Watch closely as the story unfolds with the biggest smile. What would your reaction be in this situation? Let us know your thoughts in the comments below! 👇💬❤️
-
-#Viral #Trending #MustWatch #VideoOfTheDay #StoryTime #ExplorePage #FYP #Reels #CuteAnimals #WholesomeMoments #FunnyReels #ViralReels #{platform.capitalize()}Watch #Entertainment"""
-            else:
-                ai_output = clean_ai_output(ai_output)
-
-            # Save pure Gemini output into .txt file
-            txt_path = target_folder / f"{video_index}_seo_caption_hashtags.txt"
-            with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(ai_output.strip())
-
             try:
                 import web_server
-                web_server.state.latest_result = ai_output.strip()
+                web_server.state.latest_result = {
+                    "folder": target_folder.name,
+                    "video_file": renamed_filename,
+                    "txt_file": "",
+                    "content": ai_output
+                }
             except Exception:
                 pass
 
             self.log(f"   ✂️  CUT & RENAME ➔ {target_folder.name}/{renamed_filename}")
-            self.log(f"   📝 Pure Gemini .txt Saved: {txt_path.name}")
 
         self.msg_queue.put(("finished", f"🎉 सबै {total_files} वटा भिडियोहरू Gemini AI ले विश्लेषण गरी शुद्ध Hook, Caption, र Hashtag सहित CUT र Rename गरियो!"))
         self.is_processing = False

@@ -94,6 +94,79 @@ def get_gemini_key():
     cfg = load_config()
     return cfg.get("gemini_api_key", "").strip()
 
+def split_caption_and_hashtags(text):
+    if not text:
+        return "", ""
+    hashtags = re.findall(r'#\w+', text)
+    caption_part = re.sub(r'#\w+', '', text)
+    caption_part = re.sub(r'[\r\n\t]+', ' ', caption_part)
+    caption_part = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', caption_part)
+    caption_part = re.sub(r'\s+', ' ', caption_part).strip().rstrip('. ')
+    hashtag_str = ' '.join(hashtags)
+    return caption_part, hashtag_str
+
+def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=240):
+    ext = ext.lower() if ext else ".mp4"
+    if not ext.startswith("."):
+        ext = "." + ext
+
+    caption, hashtags = split_caption_and_hashtags(ai_text)
+
+    if not caption and not hashtags:
+        base_name = fallback_stem
+    elif not hashtags:
+        base_name = caption
+    elif not caption:
+        base_name = hashtags
+    else:
+        candidate = f"{caption} {hashtags}"
+        if len(candidate) <= max_len:
+            base_name = candidate
+        else:
+            selected_tags = []
+            tag_len = 0
+            for tag in hashtags.split():
+                if tag_len + len(tag) + 1 <= 85:
+                    selected_tags.append(tag)
+                    tag_len += len(tag) + 1
+                else:
+                    break
+            tag_part = ' '.join(selected_tags)
+            avail_for_caption = max_len - len(tag_part) - 1
+            if len(caption) > avail_for_caption:
+                truncated = caption[:avail_for_caption]
+                last_space = truncated.rfind(' ')
+                if last_space > avail_for_caption // 2:
+                    caption_part = truncated[:last_space].rstrip('. ')
+                else:
+                    caption_part = truncated.rstrip('. ')
+            else:
+                caption_part = caption
+            base_name = f"{caption_part} {tag_part}".strip()
+
+    base_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', base_name).strip().rstrip('. ')
+    if len(base_name) > max_len:
+        base_name = base_name[:max_len].rstrip('. ')
+    if not base_name:
+        base_name = fallback_stem
+
+    candidate_name = f"{base_name}{ext}"
+    if target_folder is None:
+        return candidate_name
+
+    tf = Path(target_folder)
+    if not tf.exists() or not (tf / candidate_name).exists():
+        return candidate_name
+
+    counter = 1
+    while True:
+        tag = f" ({counter})"
+        trimmed_base = base_name[:(max_len - len(tag))].rstrip('. ')
+        new_name = f"{trimmed_base}{tag}{ext}"
+        if not (tf / new_name).exists():
+            return new_name
+        counter += 1
+
 def get_next_available_index(target_folder):
     """Finds the next unused sequential index (1, 2, 3...) inside target_folder."""
     target_folder.mkdir(parents=True, exist_ok=True)
@@ -177,9 +250,9 @@ EXACT FORMAT TO FOLLOW:
 #Hashtag1 #Hashtag2 #Hashtag3 #Hashtag4 #Hashtag5 ... (15-20 viral, trending hashtags for {platform_name.upper()})
 
 EXAMPLE:
-This baby keeps tapping on the rainy window… while the African Grey parrot watches every move from behind. 😂🦜👶 Then the baby turns around with the BIGGEST smile like they’ve been caught! ❤️
+She walks into the house with her suitcase and paperwork… and within seconds the entire family confrontation explodes. 😳📄💔 Accusations fly, everyone gets pulled into the argument, and by the end one person is left standing there as the others walk away. Family drama just got REAL. 👀🔥
 
-#TalkingParrot #AfricanGrey #BabyAndParrot #FunnyBaby #CuteBaby #FunnyParrot #ParrotLife #CuteAnimals #WholesomeMoments #FunnyReels #ViralReels #MustWatch
+#FamilyDrama #FamilyConflict #FamilySecrets #RelationshipDrama #EmotionalStory #FamilyChaos #DramaReels #UnexpectedTruth #StoryTime #EmotionalDrama #ViralReels #MustWatch
 
 CRITICAL RULES:
 - EVERYTHING MUST be written strictly in 100% FLUENT ENGLISH ONLY.
@@ -271,20 +344,14 @@ def main():
             key=lambda x: x.name.lower()
         )
 
-        for media_path in media_files:
-            video_index = get_next_available_index(target_folder)
+        for idx, media_path in enumerate(media_files, 1):
             ext = media_path.suffix.lower()
-            renamed_name = f"{video_index}{ext}"
-            renamed_target = target_folder / renamed_name
 
-            print(f"\n[{video_index}] 🎬 {media_path.name}")
+            print(f"\n[{idx}] 🎬 {media_path.name}")
             print(f"   📁 Folder: {folder_name}/ (Folder Name Unchanged)")
-            print(f"   🎥 Video Rename: {renamed_name}")
+            print(f"   🎥 Video will be renamed with Caption & Hashtags")
 
             ai_output = upload_and_analyze_with_gemini(gemini_key, media_path, platform=platform)
-
-            # Move and rename safely
-            safe_move_file(media_path, renamed_target)
 
             # Fallback if Gemini failed so user never gets blank file
             if not ai_output:
@@ -294,13 +361,13 @@ def main():
             else:
                 ai_output = clean_ai_output(ai_output)
 
-            # Save pure Gemini output into .txt
-            txt_path = target_folder / f"{video_index}_seo_caption_hashtags.txt"
-            with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(ai_output.strip())
+            renamed_name = generate_video_filename(ai_output, ext, target_folder, fallback_stem=media_path.stem)
+            renamed_target = target_folder / renamed_name
+
+            # Move and rename safely
+            safe_move_file(media_path, renamed_target)
 
             print(f"   ✂️  CUT ➔ {target_folder.name}/{renamed_name}")
-            print(f"   📝 Pure Gemini Package (.txt) सुरक्षित भयो: {txt_path.name}")
             total_count += 1
 
         try:
@@ -315,21 +382,13 @@ def main():
             folder_name = media_path.stem
             target_folder = OUTPUT_DIR / folder_name
             target_folder.mkdir(parents=True, exist_ok=True)
-
-            # Inside target_folder, find next sequential index (1, 2, ...)
-            video_index = get_next_available_index(target_folder)
             ext = media_path.suffix.lower()
-            renamed_name = f"{video_index}{ext}"
-            renamed_target = target_folder / renamed_name
 
             print(f"\n[{idx}/{total}] 🎬 {media_path.name}")
             print(f"   📁 Folder: {folder_name}/ (Folder Name Unchanged)")
-            print(f"   🎥 Video Rename: {renamed_name}")
+            print(f"   🎥 Video will be renamed with Caption & Hashtags")
 
             ai_output = upload_and_analyze_with_gemini(gemini_key, media_path, platform=platform)
-
-            # Move and rename safely
-            safe_move_file(media_path, renamed_target)
 
             # Fallback if Gemini failed so user never gets blank file
             if not ai_output:
@@ -339,18 +398,18 @@ def main():
             else:
                 ai_output = clean_ai_output(ai_output)
 
-            # Save pure Gemini output into .txt
-            txt_path = target_folder / f"{video_index}_seo_caption_hashtags.txt"
-            with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(ai_output.strip())
+            renamed_name = generate_video_filename(ai_output, ext, target_folder, fallback_stem=media_path.stem)
+            renamed_target = target_folder / renamed_name
+
+            # Move and rename safely
+            safe_move_file(media_path, renamed_target)
 
             print(f"   ✂️  CUT ➔ {target_folder.name}/{renamed_name}")
-            print(f"   📝 Pure Gemini Package (.txt) सुरक्षित भयो: {txt_path.name}")
             total_count += 1
 
     print("\n" + "=" * 68)
-    print(f"🎉 सबै {total_count} वटा भिडियोहरू Gemini AI ले भिडियो हेरेर/सुनेर")
-    print("   शुद्ध Hook, Caption र Hashtag मात्र निकाली .txt मा सेभ गरियो!")
+    print(f"🎉 सबै {total_count} वटा भिडियोहरू Gemini AI ले विश्लेषण गरी")
+    print("   Caption & Hashtags अनुसार सिधै भिडियोको नाम Rename गरियो!")
     print(f"📂 Output फोल्डर: {OUTPUT_DIR}")
     print("=" * 68)
 
