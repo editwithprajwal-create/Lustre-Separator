@@ -1946,12 +1946,12 @@ def launch_modern_desktop_app():
             time.sleep(1)
 
 def main():
-    if "--web" in sys.argv:
-        launch_modern_desktop_app()
-    else:
+    if "--legacy" in sys.argv or "--tk" in sys.argv:
         root = tk.Tk()
         app = LustreSeparatorApp(root)
         root.mainloop()
+    else:
+        launch_modern_desktop_app()
 
 if __name__ == "__main__":
     main()

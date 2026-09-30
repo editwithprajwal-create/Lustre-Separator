@@ -1167,9 +1167,18 @@ CRITICAL RULES:
             pass
 
 def main():
-    root = tk.Tk()
-    app = VideoSeparatorGUI(root)
-    root.mainloop()
+    if "--legacy" in sys.argv or "--tk" in sys.argv:
+        root = tk.Tk()
+        app = VideoSeparatorGUI(root)
+        root.mainloop()
+    else:
+        try:
+            import LustreSeparator
+            LustreSeparator.launch_modern_desktop_app()
+        except Exception:
+            root = tk.Tk()
+            app = VideoSeparatorGUI(root)
+            root.mainloop()
 
 if __name__ == "__main__":
     main()
