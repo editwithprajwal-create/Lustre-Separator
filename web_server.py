@@ -69,12 +69,12 @@ DEFAULT_CONFIG = {
 }
 
 ACTIVE_MODELS = [
+    "gemini-3.8-flash",
     "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
     "gemini-flash-latest",
+    "gemini-2.5-flash-lite",
     "gemini-3.1-flash-lite",
-    "gemini-3.5-flash",
-    "gemini-3.8-flash"
+    "gemini-3.5-flash"
 ]
 
 def load_config():
@@ -998,7 +998,7 @@ class LustreHTTPHandler(SimpleHTTPRequestHandler):
                     self.send_json({"error": "Unauthorized path"}, status=403)
                     return
                 if not target_path.exists():
-                    self.send_json({"error": "File not found"}, status=404)
+                    self.send_json({"ok": True, "message": "File already removed"})
                     return
                 if target_path.is_file():
                     fname = target_path.name
