@@ -543,7 +543,7 @@ class LustreSeparatorApp:
         # Studio Pro Hub Button (Imperial Gold Badge)
         self.btn_studio_pro = tk.Button(
             title_row,
-            text="👑 STUDIO PRO • v2.5.0 ▾",
+            text="👑 STUDIO PRO • v3.0.0 ▾",
             font=("Segoe UI", 8, "bold"),
             bg="#2b2413",
             fg="#fce881",
@@ -1176,8 +1176,8 @@ class LustreSeparatorApp:
             bg="#0f0e0b"
         ).pack(anchor="w")
 
-        local_ver = auto_updater.get_local_version() if AUTO_UPDATER_AVAILABLE else {"version": "2.5.0"}
-        cur_v = local_ver.get("version", "2.5.0")
+        local_ver = auto_updater.get_local_version() if AUTO_UPDATER_AVAILABLE else {"version": "3.0.0"}
+        cur_v = local_ver.get("version", "3.0.0")
 
         self.dlg_ver_lbl = tk.Label(
             top_frame,

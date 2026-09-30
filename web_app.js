@@ -891,14 +891,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 if (btnStudioProBadge) btnStudioProBadge.classList.remove('has-update');
-                if (studioProVersionText) studioProVersionText.textContent = `v${data.current_version || '2.5.0'}`;
-                if (spMenuVersionBadge) spMenuVersionBadge.textContent = `v${data.current_version || '2.5.0'}`;
+                if (studioProVersionText) studioProVersionText.textContent = `v${data.current_version || '3.0.0'}`;
+                if (spMenuVersionBadge) spMenuVersionBadge.textContent = `v${data.current_version || '3.0.0'}`;
                 if (spUpdateHint) spUpdateHint.textContent = '✅ Latest build installed';
                 if (spBadgeUpdate) spBadgeUpdate.style.display = 'none';
                 if (spMenuUpdateDesc) spMenuUpdateDesc.textContent = 'Check & pull latest updates';
 
                 if (versionUpdaterPill) versionUpdaterPill.classList.remove('update-ready');
-                if (versionLabel) versionLabel.textContent = `v${data.current_version || '2.5.0'}`;
+                if (versionLabel) versionLabel.textContent = `v${data.current_version || '3.0.0'}`;
                 if (btnQuickUpdate) btnQuickUpdate.style.display = 'none';
                 if (tabUpdateDot) tabUpdateDot.style.display = 'none';
 
