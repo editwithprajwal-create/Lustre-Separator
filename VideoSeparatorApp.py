@@ -114,10 +114,22 @@ def split_caption_and_hashtags(text):
     hashtag_str = ' '.join(hashtags)
     return caption_part, hashtag_str
 
-def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=248):
+def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=135):
     ext = ext.lower() if ext else ".mp4"
     if not ext.startswith("."):
         ext = "." + ext
+
+    # Windows MAX_PATH is 260. VLC 32-bit fails if full absolute path >= 256.
+    # Keep total absolute path strictly <= 235 characters to guarantee 100% VLC, Explorer & media player compatibility.
+    if target_folder:
+        try:
+            folder_len = len(str(Path(target_folder).resolve()))
+        except Exception:
+            folder_len = 80
+    else:
+        folder_len = 80
+    safe_max_len = max(50, min(max_len, 235 - folder_len - len(ext) - 1))
+    max_len = safe_max_len
 
     caption, hashtags = split_caption_and_hashtags(ai_text)
 
@@ -253,7 +265,7 @@ def open_directory_in_explorer(dir_path):
         print(f"Error opening directory {dir_path}: {e}")
         return False
 
-def safe_move_file(src, dst, max_retries=6, delay=0.3):
+def safe_move_file(src, dst, max_retries=10, delay=0.3):
     """
     Safely and STRICTLY moves (cuts) a file from src to dst.
     Guarantees src is completely removed from its source location (zero copying).
@@ -276,8 +288,10 @@ def safe_move_file(src, dst, max_retries=6, delay=0.3):
             pass
 
     import gc
+    # Phase 1: Direct move attempt
     for attempt in range(max_retries):
         try:
+            gc.collect()
             shutil.move(str(src), str(dst))
             if not src.exists():
                 return True
@@ -285,7 +299,7 @@ def safe_move_file(src, dst, max_retries=6, delay=0.3):
             gc.collect()
             time.sleep(delay)
 
-    # Cross-volume or stubborn lock fallback:
+    # Phase 2: Copy fallback + aggressive force delete of original
     try:
         shutil.copy2(str(src), str(dst))
         if dst.exists() and dst.stat().st_size == src.stat().st_size:
@@ -295,12 +309,18 @@ def safe_move_file(src, dst, max_retries=6, delay=0.3):
                     src.unlink()
                     return True
                 except Exception:
-                    time.sleep(delay)
-            return True
+                    try:
+                        import os
+                        os.chmod(str(src), 0o777)
+                        os.remove(str(src))
+                        return True
+                    except Exception:
+                        time.sleep(delay)
+            return not src.exists()
     except Exception:
         pass
 
-    return dst.exists() and dst.stat().st_size > 0
+    return not src.exists()
 
 class VideoSeparatorGUI:
     def __init__(self, root):
@@ -1054,15 +1074,15 @@ Provide ONLY the story-driven caption followed directly by hashtags.
 Do NOT include ANY section titles, labels, or prefixes (Do NOT write '🎯 HOOK:', '📌 CAPTION:', '🏷️ HASHTAGS:', 'Caption:', 'Hook:', etc.).
 
 CRITICAL LENGTH RULE FOR VIDEO FILENAME:
-Keep the entire output (caption + all hashtags combined) concise, punchy, and strictly within 220 characters so that the entire text fits 100% into the video file name without getting cut off. Write 1-2 impactful sentences for the caption, followed by 5-8 top viral hashtags for {platform.upper()}.
+Keep the entire output (caption + all hashtags combined) concise, punchy, and strictly within 110-120 characters so that the entire text fits 100% into the video file name without getting cut off. Write 1 impactful sentence for the caption, followed by 3-5 top viral hashtags for {platform.upper()}.
 
 EXACT FORMAT TO FOLLOW:
 [Engaging, story-driven caption strictly in fluent English describing the key moment, emotion, humor, or situation with appropriate emojis]
 
-#Hashtag1 #Hashtag2 #Hashtag3 #Hashtag4 #Hashtag5 #Hashtag6 #Hashtag7 #Hashtag8
+#Hashtag1 #Hashtag2 #Hashtag3 #Hashtag4 #Hashtag5
 
 EXAMPLE:
-She walks in with her paperwork and family confrontation explodes! 😳📄 Accusations fly and drama got real. 👀🔥 #FamilyDrama #FamilySecrets #RelationshipDrama #StoryTime #ViralReels #MustWatch
+She walks in with her paperwork and family confrontation explodes! 😳📄 Accusations fly. 👀🔥 #FamilyDrama #RelationshipDrama #ViralReels #MustWatch
 
 CRITICAL RULES:
 - EVERYTHING MUST be written strictly in 100% FLUENT ENGLISH ONLY.
@@ -1105,7 +1125,7 @@ CRITICAL RULES:
                 uploaded_file = None
                 import gc
                 gc.collect()
-                time.sleep(0.2)
+                time.sleep(0.3)
 
             if self.stop_requested:
                 self.log("\n🛑 Analysis प्रयोगकर्ताद्वारा रोकियो (Stopped)!")
@@ -1125,14 +1145,21 @@ CRITICAL RULES:
             target_media = target_folder / renamed_filename
 
             # Strictly CUT & Move media from input_media to output_media
+            import gc
+            gc.collect()
+            time.sleep(0.3)
             safe_move_file(media_path, target_media)
             if media_path.exists():
-                try:
-                    import gc
-                    gc.collect()
-                    media_path.unlink()
-                except Exception:
-                    pass
+                for _ in range(5):
+                    try:
+                        gc.collect()
+                        time.sleep(0.2)
+                        import os
+                        os.chmod(str(media_path), 0o777)
+                        media_path.unlink()
+                        break
+                    except Exception:
+                        pass
 
             # Clean up empty parent folder inside input_media if it was inside a subfolder
             if media_path.parent != INPUT_DIR:

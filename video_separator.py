@@ -105,10 +105,22 @@ def split_caption_and_hashtags(text):
     hashtag_str = ' '.join(hashtags)
     return caption_part, hashtag_str
 
-def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=248):
+def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=135):
     ext = ext.lower() if ext else ".mp4"
     if not ext.startswith("."):
         ext = "." + ext
+
+    # Windows MAX_PATH is 260. VLC 32-bit fails if full absolute path >= 256.
+    # Keep total absolute path strictly <= 235 characters to guarantee 100% VLC, Explorer & media player compatibility.
+    if target_folder:
+        try:
+            folder_len = len(str(Path(target_folder).resolve()))
+        except Exception:
+            folder_len = 80
+    else:
+        folder_len = 80
+    safe_max_len = max(50, min(max_len, 235 - folder_len - len(ext) - 1))
+    max_len = safe_max_len
 
     caption, hashtags = split_caption_and_hashtags(ai_text)
 
@@ -200,8 +212,8 @@ def get_next_available_index(target_folder):
         next_idx += 1
     return next_idx
 
-def safe_move_file(src, dst):
-    """Safely moves a file, avoiding FileExistsError or destination collision on Windows."""
+def safe_move_file(src, dst, max_retries=10, delay=0.3):
+    """Safely and strictly cuts a file, avoiding FileExistsError or locks on Windows."""
     src = Path(src)
     dst = Path(dst)
     if not src.exists():
@@ -212,8 +224,39 @@ def safe_move_file(src, dst):
             dst.unlink()
         except Exception:
             pass
-    shutil.move(str(src), str(dst))
-    return True
+
+    import gc
+    for attempt in range(max_retries):
+        try:
+            gc.collect()
+            shutil.move(str(src), str(dst))
+            if not src.exists():
+                return True
+        except Exception:
+            gc.collect()
+            time.sleep(delay)
+
+    try:
+        shutil.copy2(str(src), str(dst))
+        if dst.exists() and dst.stat().st_size == src.stat().st_size:
+            for attempt in range(max_retries):
+                try:
+                    gc.collect()
+                    src.unlink()
+                    return True
+                except Exception:
+                    try:
+                        import os
+                        os.chmod(str(src), 0o777)
+                        os.remove(str(src))
+                        return True
+                    except Exception:
+                        time.sleep(delay)
+            return not src.exists()
+    except Exception:
+        pass
+
+    return not src.exists()
 
 def upload_and_analyze_with_gemini(api_key, media_path, platform="facebook"):
     """
@@ -255,15 +298,15 @@ Provide ONLY the story-driven caption followed directly by hashtags.
 Do NOT include ANY section titles, labels, or prefixes (Do NOT write '🎯 HOOK:', '📌 CAPTION:', '🏷️ HASHTAGS:', 'Caption:', 'Hook:', etc.).
 
 CRITICAL LENGTH RULE FOR VIDEO FILENAME:
-Keep the entire output (caption + all hashtags combined) concise, punchy, and strictly within 220 characters so that the entire text fits 100% into the video file name without getting cut off. Write 1-2 impactful sentences for the caption, followed by 5-8 top viral hashtags for {platform_name.upper()}.
+Keep the entire output (caption + all hashtags combined) concise, punchy, and strictly within 110-120 characters so that the entire text fits 100% into the video file name without getting cut off. Write 1 impactful sentence for the caption, followed by 3-5 top viral hashtags for {platform_name.upper()}.
 
 EXACT FORMAT TO FOLLOW:
 [Engaging, story-driven caption strictly in fluent English describing the key moment, emotion, humor, or situation with appropriate emojis]
 
-#Hashtag1 #Hashtag2 #Hashtag3 #Hashtag4 #Hashtag5 #Hashtag6 #Hashtag7 #Hashtag8
+#Hashtag1 #Hashtag2 #Hashtag3 #Hashtag4 #Hashtag5
 
 EXAMPLE:
-She walks in with her paperwork and family confrontation explodes! 😳📄 Accusations fly and drama got real. 👀🔥 #FamilyDrama #FamilySecrets #RelationshipDrama #StoryTime #ViralReels #MustWatch
+She walks in with her paperwork and family confrontation explodes! 😳📄 Accusations fly. 👀🔥 #FamilyDrama #RelationshipDrama #ViralReels #MustWatch
 
 CRITICAL RULES:
 - EVERYTHING MUST be written strictly in 100% FLUENT ENGLISH ONLY.
@@ -374,7 +417,21 @@ def main():
             renamed_target = target_folder / renamed_name
 
             # Move and rename safely
+            import gc
+            gc.collect()
+            time.sleep(0.3)
             safe_move_file(media_path, renamed_target)
+            if media_path.exists():
+                for _ in range(5):
+                    try:
+                        gc.collect()
+                        time.sleep(0.2)
+                        import os
+                        os.chmod(str(media_path), 0o777)
+                        media_path.unlink()
+                        break
+                    except Exception:
+                        pass
 
             print(f"   ✂️  CUT ➔ {renamed_name}")
             total_count += 1
@@ -407,7 +464,21 @@ def main():
             renamed_target = target_folder / renamed_name
 
             # Move and rename safely
+            import gc
+            gc.collect()
+            time.sleep(0.3)
             safe_move_file(media_path, renamed_target)
+            if media_path.exists():
+                for _ in range(5):
+                    try:
+                        gc.collect()
+                        time.sleep(0.2)
+                        import os
+                        os.chmod(str(media_path), 0o777)
+                        media_path.unlink()
+                        break
+                    except Exception:
+                        pass
 
             print(f"   ✂️  CUT ➔ {renamed_name}")
             total_count += 1

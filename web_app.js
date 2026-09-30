@@ -329,7 +329,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/status');
             const data = await res.json();
 
+            const wasProcessing = isProcessing;
             isProcessing = data.is_processing;
+
+            // Automatically refresh input file list when processing finishes
+            if (wasProcessing && !isProcessing) {
+                loadFiles();
+            }
 
             // Visualizer pulse
             if (aiVisualizer) {
