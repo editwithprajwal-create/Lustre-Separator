@@ -129,6 +129,26 @@ def save_config(cfg):
     except Exception as e:
         print(f"Error saving config: {e}")
 
+def ensure_viral_hashtags(ai_text):
+    """Guarantees essential mega-viral hashtags like #MustWatch, #FYP, and #Viral are never missed."""
+    if not ai_text:
+        return ai_text
+    lower_text = ai_text.lower()
+    tags_to_append = []
+    if "#mustwatch" not in lower_text:
+        tags_to_append.append("#MustWatch")
+    if "#fyp" not in lower_text:
+        tags_to_append.append("#FYP")
+    if "#viral" not in lower_text and "#viralreels" not in lower_text:
+        tags_to_append.append("#Viral")
+
+    if tags_to_append:
+        if '#' in ai_text:
+            return f"{ai_text.strip()} {' '.join(tags_to_append)}"
+        else:
+            return f"{ai_text.strip()}   {' '.join(tags_to_append)}"
+    return ai_text
+
 def clean_ai_output(raw_text):
     """Cleans any accidental section headers/labels (HOOK:, CAPTION:, HASHTAGS:) so user gets pure caption & hashtags."""
     if not raw_text:
@@ -158,7 +178,7 @@ def clean_ai_output(raw_text):
 
     result = "\n".join(cleaned_lines).strip()
     result = re.sub(r'\n{3,}', '\n\n', result)
-    return result
+    return ensure_viral_hashtags(result)
 
 def split_caption_and_hashtags(text):
     if not text:
@@ -782,13 +802,16 @@ Do NOT include ANY section titles, labels, or prefixes (Do NOT write '🎯 HOOK:
 CRITICAL LENGTH RULE FOR VIDEO FILENAME:
 Keep the entire output (caption + all hashtags combined) concise, punchy, and strictly within 110-120 characters so that the entire text fits 100% into the video file name without getting cut off. Write 1 impactful sentence for the caption, followed by 3-5 top viral hashtags for {platform.upper()}.
 
+MANDATORY VIRAL HASHTAGS REQUIREMENT:
+You MUST ALWAYS include ultra-viral reach hashtags like #MustWatch and #FYP along with 1-2 content-specific hashtags. Never omit #MustWatch or #FYP!
+
 EXACT FORMAT TO FOLLOW:
 [Engaging, story-driven caption strictly in fluent English describing the key moment, emotion, humor, or situation with appropriate emojis]
 
-#Hashtag1 #Hashtag2 #Hashtag3 #Hashtag4 #Hashtag5
+#ContentTag #MustWatch #FYP #Viral
 
 EXAMPLE:
-She walks in with her paperwork and family confrontation explodes! 😳📄 Accusations fly. 👀🔥 #FamilyDrama #RelationshipDrama #ViralReels #MustWatch
+She walks in with her paperwork and family confrontation explodes! 😳📄 Accusations fly. 👀🔥 #FamilyDrama #MustWatch #FYP #ViralReels
 
 CRITICAL RULES:
 - EVERYTHING MUST be written strictly in 100% FLUENT ENGLISH ONLY.
@@ -1038,10 +1061,13 @@ FORMAT REQUIREMENTS:
 Provide ONLY the story-driven caption followed directly by hashtags.
 Do NOT include ANY section titles, labels, or prefixes (Do NOT write '🎯 HOOK:', '📌 CAPTION:', '🏷️ HASHTAGS:', 'Caption:', 'Hook:', etc.).
 
+MANDATORY VIRAL HASHTAGS REQUIREMENT:
+You MUST ALWAYS include ultra-viral reach hashtags like #MustWatch, #FYP, and #Viral along with relevant content-specific hashtags. Never omit #MustWatch or #FYP!
+
 EXACT FORMAT TO FOLLOW:
 [Engaging, story-driven caption strictly in fluent English describing the key moment, emotion, humor, or situation with appropriate emojis]
 
-#Hashtag1 #Hashtag2 #Hashtag3 #Hashtag4 #Hashtag5 ... (15-20 viral, trending hashtags for {platform.upper()})
+#MustWatch #FYP #Viral #Trending #ViralReels ... (content-specific & trending hashtags for {platform.upper()})
 
 CRITICAL RULES:
 - EVERYTHING MUST be written strictly in 100% FLUENT ENGLISH ONLY.
