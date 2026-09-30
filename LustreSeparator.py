@@ -60,7 +60,7 @@ DEFAULT_CONFIG = {
     "language": "english",
     "tone": "viral",
     "niche": "general",
-    "upscale_4k": True
+    "upscale_4k": False
 }
 
 ACTIVE_MODELS = [
@@ -958,7 +958,7 @@ class LustreSeparatorApp:
         self.btn_stop.pack(side="left", padx=(0, 10))
         bind_hover(self.btn_stop, "#2d1717", "#dc2626")
 
-        self.upscale_4k_var = tk.BooleanVar(value=True)
+        self.upscale_4k_var = tk.BooleanVar(value=False)
         self.chk_4k = tk.Checkbutton(
             action_bar,
             text="⚡ 4K AI Upscale (GPU)",

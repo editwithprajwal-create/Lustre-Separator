@@ -142,15 +142,15 @@
             </div>
 
             <div class="deck-right">
-                <!-- 4K AI Upscale Mode Switch (Default ON) -->
-                <div class="direct-mode-toggle-box active" id="upscale4KBox" title="When ON: Video is upscaled to 4K Ultra HD on NVIDIA GPU concurrently while Gemini AI analyzes.">
+                <!-- 4K AI Upscale Mode Switch (Default OFF: 0% PC Load) -->
+                <div class="direct-mode-toggle-box" id="upscale4KBox" title="When OFF (Recommended): 0% PC load, original quality, instant separation. When ON: Optional local 4K GPU rendering.">
                     <label class="switch-toggle" for="chkUpscale4K">
-                        <input type="checkbox" id="chkUpscale4K" checked>
+                        <input type="checkbox" id="chkUpscale4K">
                         <span class="switch-slider"></span>
                     </label>
                     <div class="switch-label-wrap" onclick="document.getElementById('chkUpscale4K').click()">
-                        <span class="switch-title"><i class="fa-solid fa-bolt text-cyan"></i> 4K AI Upscale</span>
-                        <span class="switch-desc">NVIDIA NVENC • 2160p</span>
+                        <span class="switch-title"><i class="fa-solid fa-bolt text-gold"></i> 4K AI Upscale</span>
+                        <span class="switch-desc">Optional (OFF = 0% PC Load)</span>
                     </div>
                 </div>
 
@@ -213,6 +213,9 @@
                         <button id="btnAddFolder" class="mini-tool-btn" title="Add an entire folder with videos">
                             <i class="fa-solid fa-folder-plus"></i> <span>+ Folder</span>
                         </button>
+                        <button id="btnFastCutFiles" class="mini-tool-btn" title="Instant Direct CUT: Opens Windows file picker and moves videos directly with 0 upload delay">
+                            <i class="fa-solid fa-scissors"></i> <span>Fast Cut</span>
+                        </button>
                         <button id="btnRefreshFiles" class="icon-refresh-btn" title="Refresh files from folder & Reset Done count">
                             <i class="fa-solid fa-rotate"></i>
                         </button>
@@ -242,8 +245,11 @@
                             <button class="empty-cta-btn secondary" id="btnEmptyAddFolder">
                                 <i class="fa-solid fa-folder-plus"></i> Drop / Pick Folder
                             </button>
+                            <button class="empty-cta-btn fast-cut-cta" id="btnEmptyFastCut" title="Windows Native Dialog: Instantly cuts files into input_media">
+                                <i class="fa-solid fa-scissors"></i> ✂️ Fast Cut (Windows Dialog)
+                            </button>
                             <button class="empty-cta-btn ghost" onclick="document.getElementById('btnOpenInputFolder').click()">
-                                <i class="fa-regular fa-folder-open"></i> Open input_media
+                                <i class="fa-regular fa-folder-open"></i> Open input_media Folder
                             </button>
                         </div>
                     </div>

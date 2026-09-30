@@ -88,6 +88,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnPerformUpdate = document.getElementById('btnPerformUpdate');
     const btnPerformPush = document.getElementById('btnPerformPush');
 
+    // Global API Base URL (handles both http://localhost:5050 and file:/// protocols)
+    const API_BASE = (window.location.protocol === 'file:') ? 'http://127.0.0.1:5050' : '';
+
     // Drag & Drop / Upload Elements
     const dropOverlay = document.getElementById('dropOverlay');
     const uploadModal = document.getElementById('uploadModal');
@@ -96,17 +99,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const uploadBarFill = document.getElementById('uploadBarFill');
     const btnAddFiles = document.getElementById('btnAddFiles');
     const btnAddFolder = document.getElementById('btnAddFolder');
+    const btnFastCutFiles = document.getElementById('btnFastCutFiles');
     const filePickerInput = document.getElementById('filePickerInput');
     const folderPickerInput = document.getElementById('folderPickerInput');
     const btnEmptyAddFiles = document.getElementById('btnEmptyAddFiles');
     const btnEmptyAddFolder = document.getElementById('btnEmptyAddFolder');
+    const btnEmptyFastCut = document.getElementById('btnEmptyFastCut');
     const chkDirectMode = document.getElementById('chkDirectMode');
     const directModeBox = document.getElementById('directModeBox');
     let isDirectMode = false;
 
     const chkUpscale4K = document.getElementById('chkUpscale4K');
     const upscale4KBox = document.getElementById('upscale4KBox');
-    let isUpscale4K = true;
+    let isUpscale4K = false;
 
     const toast = document.getElementById('toast');
     const toastMsg = document.getElementById('toastMsg');
@@ -174,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- API Calls ---
     async function loadFiles() {
         try {
-            const res = await fetch('/api/files');
+            const res = await fetch(`${API_BASE}/api/files`);
             const data = await res.json();
             files = data.files || [];
             renderFiles();
@@ -269,7 +274,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function deleteFile(relPath, fileName) {
         try {
-            const res = await fetch('/api/delete_file', {
+            const res = await fetch(`${API_BASE}/api/delete_file`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ file: relPath })
@@ -300,7 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function startProcessing(targets) {
         try {
-            const res = await fetch('/api/process', {
+            const res = await fetch(`${API_BASE}/api/process`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
@@ -326,7 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             btnStop.disabled = true;
             btnStop.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Stopping...</span>';
-            await fetch('/api/stop', { method: 'POST' });
+            await fetch(`${API_BASE}/api/stop`, { method: 'POST' });
             showToast('🛑 Stop signal dispatched. Halting after current step...');
         } catch (err) {
             showToast('❌ Failed to request stop');
@@ -335,7 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function pollStatus() {
         try {
-            const res = await fetch('/api/status');
+            const res = await fetch(`${API_BASE}/api/status`);
             const data = await res.json();
 
             const wasProcessing = isProcessing;
@@ -538,14 +543,13 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             e.stopPropagation();
             showToast('📂 Opening input_media folder in Windows Explorer...');
-            const baseUrl = (window.location.protocol === 'file:') ? 'http://127.0.0.1:5050' : '';
             try {
-                const res = await fetch(`${baseUrl}/api/open_input`, { method: 'POST' });
+                const res = await fetch(`${API_BASE}/api/open_input`, { method: 'POST' });
                 const data = await res.json();
                 if (data && data.ok) {
                     showToast('✅ input_media folder opened in Windows Explorer');
                 } else {
-                    const res2 = await fetch(`${baseUrl}/api/open_input`);
+                    const res2 = await fetch(`${API_BASE}/api/open_input`);
                     const data2 = await res2.json();
                     if (data2 && data2.ok) {
                         showToast('✅ input_media folder opened');
@@ -567,14 +571,13 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             e.stopPropagation();
             showToast('📁 Opening output_media folder in Windows Explorer...');
-            const baseUrl = (window.location.protocol === 'file:') ? 'http://127.0.0.1:5050' : '';
             try {
-                const res = await fetch(`${baseUrl}/api/open_output`, { method: 'POST' });
+                const res = await fetch(`${API_BASE}/api/open_output`, { method: 'POST' });
                 const data = await res.json();
                 if (data && data.ok) {
                     showToast('✅ output_media folder opened in Windows Explorer');
                 } else {
-                    const res2 = await fetch(`${baseUrl}/api/open_output`);
+                    const res2 = await fetch(`${API_BASE}/api/open_output`);
                     const data2 = await res2.json();
                     if (data2 && data2.ok) {
                         showToast('✅ output_media folder opened');
@@ -641,7 +644,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================================
     async function performFullStudioReset() {
         try {
-            await fetch('/api/reset_all', { method: 'POST' });
+            await fetch(`${API_BASE}/api/reset_all`, { method: 'POST' });
         } catch (e) {}
 
         // 1. Reset Done count & Progress Trackers
@@ -702,7 +705,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnClearConsole) {
         btnClearConsole.addEventListener('click', async () => {
             try {
-                await fetch('/api/clear_logs', { method: 'POST' });
+                await fetch(`${API_BASE}/api/clear_logs`, { method: 'POST' });
             } catch (e) {}
             if (terminalLogBox) {
                 terminalLogBox.innerHTML = '<div class="log-line system">[00:00:00] Console logs cleared.</div>';
@@ -776,7 +779,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (studioProContainer) studioProContainer.classList.remove('open');
         if (tabSettingsApi) tabSettingsApi.click();
         try {
-            const res = await fetch('/api/config');
+            const res = await fetch(`${API_BASE}/api/config`);
             const cfg = await res.json();
             inputApiKey.value = cfg.gemini_api_key || '';
             settingsModal.classList.add('show');
@@ -795,7 +798,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnSaveApiKey.addEventListener('click', async () => {
         const key = inputApiKey.value.trim();
         try {
-            await fetch('/api/config', {
+            await fetch(`${API_BASE}/api/config`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ gemini_api_key: key })
@@ -837,7 +840,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            const res = await fetch('/api/check_update', { method: 'POST' });
+            const res = await fetch(`${API_BASE}/api/check_update`, { method: 'POST' });
             const data = await res.json();
 
             if (modalVersionBadge && data.current_version) {
@@ -953,7 +956,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            const res = await fetch('/api/perform_update', { method: 'POST' });
+            const res = await fetch(`${API_BASE}/api/perform_update`, { method: 'POST' });
             const data = await res.json();
 
             if (data.ok) {
@@ -983,7 +986,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            const res = await fetch('/api/perform_push', {
+            const res = await fetch(`${API_BASE}/api/perform_push`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ commit_message: commitMsg.trim() || undefined })
@@ -1042,7 +1045,7 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 btnConnectGit.disabled = true;
                 btnConnectGit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Linking...';
-                const res = await fetch('/api/configure_git', {
+                const res = await fetch(`${API_BASE}/api/configure_git`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ remote_url: url, branch: 'main' })
@@ -1133,6 +1136,49 @@ document.addEventListener('DOMContentLoaded', () => {
         return fileEntries;
     }
 
+    function uploadSingleFile(item, onProgress) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `${API_BASE}/api/upload`, true);
+            xhr.setRequestHeader('X-Relative-Path', encodeURIComponent(item.relPath));
+            xhr.setRequestHeader('X-File-Name', encodeURIComponent(item.file.name));
+            xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+
+            if (xhr.upload && onProgress) {
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        onProgress(e.loaded, e.total);
+                    }
+                };
+            }
+
+            xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try {
+                        const data = JSON.parse(xhr.responseText);
+                        resolve(data);
+                    } catch (err) {
+                        resolve({ ok: true });
+                    }
+                } else {
+                    let errObj = {};
+                    try { errObj = JSON.parse(xhr.responseText); } catch (e) {}
+                    reject(new Error(errObj.error || `HTTP ${xhr.status} error`));
+                }
+            };
+
+            xhr.onerror = () => {
+                reject(new Error('Network connection failed during upload. Check web server.'));
+            };
+
+            xhr.ontimeout = () => {
+                reject(new Error('Upload timed out'));
+            };
+
+            xhr.send(item.file);
+        });
+    }
+
     async function uploadFilesBatch(fileEntries) {
         const mediaExts = ['.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v', '.jpg', '.jpeg', '.png', '.webp'];
         const validMedia = fileEntries.filter(item => {
@@ -1150,30 +1196,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
         for (let i = 0; i < validMedia.length; i++) {
             const item = validMedia[i];
-            if (uploadFileName) uploadFileName.textContent = item.relPath;
+            const sizeMB = (item.file.size / (1024 * 1024)).toFixed(1);
+            if (uploadFileName) uploadFileName.textContent = `${item.relPath} (${sizeMB} MB)`;
             if (uploadCountBadge) uploadCountBadge.textContent = `${i + 1} / ${validMedia.length}`;
-            if (uploadBarFill) uploadBarFill.style.width = `${Math.round(((i) / validMedia.length) * 100)}%`;
 
             try {
-                const res = await fetch('/api/upload', {
-                    method: 'POST',
-                    headers: {
-                        'X-Relative-Path': encodeURIComponent(item.relPath),
-                        'X-File-Name': encodeURIComponent(item.file.name),
-                        'Content-Type': 'application/octet-stream'
-                    },
-                    body: item.file
+                await uploadSingleFile(item, (loaded, total) => {
+                    const filePct = Math.round((loaded / total) * 100);
+                    const overallPct = Math.round(((i + (loaded / total)) / validMedia.length) * 100);
+                    if (uploadBarFill) uploadBarFill.style.width = `${overallPct}%`;
+                    const loadedMB = (loaded / (1024 * 1024)).toFixed(1);
+                    if (uploadFileName) {
+                        uploadFileName.textContent = `${item.file.name} [${loadedMB}MB / ${sizeMB}MB • ${filePct}%]`;
+                    }
                 });
-                if (res.ok) {
-                    uploadedCount++;
-                } else {
-                    const err = await res.json().catch(() => ({}));
-                    console.error('Upload failed for', item.relPath, err);
-                    showToast(`⚠️ Upload error: ${err.error || ('HTTP ' + res.status)}`);
-                }
+                uploadedCount++;
             } catch (err) {
                 console.error('Upload failed for', item.relPath, err);
-                showToast(`❌ Network error uploading ${item.file.name}`);
+                showToast(`⚠️ ${item.file.name}: ${err.message}`);
             }
 
             if (uploadBarFill) uploadBarFill.style.width = `${Math.round(((i + 1) / validMedia.length) * 100)}%`;
@@ -1184,9 +1224,51 @@ document.addEventListener('DOMContentLoaded', () => {
             if (uploadBarFill) uploadBarFill.style.width = '0%';
             loadFiles();
             if (uploadedCount > 0) {
-                showToast(`✨ Successfully uploaded ${uploadedCount} file(s) into Media Queue!`);
+                showToast(`✨ Successfully added ${uploadedCount} file(s) into Media Queue!`);
             }
         }, 500);
+    }
+
+    // Windows Native File / Folder Cut Dialogs (Direct Move with Zero Network Stream)
+    async function fastPickFiles() {
+        showToast('✂️ Opening Windows File Dialog (Direct CUT)...');
+        try {
+            const res = await fetch(`${API_BASE}/api/pick_and_cut_files`, { method: 'POST' });
+            const data = await res.json();
+            if (data.ok) {
+                if (data.count > 0) {
+                    showToast(`✨ Directly CUT & moved ${data.count} video(s) into Media Queue!`);
+                    await loadFiles();
+                } else {
+                    showToast('ℹ️ No files selected');
+                }
+            } else {
+                showToast(`❌ Cut error: ${data.error}`);
+            }
+        } catch (err) {
+            // Fallback to browser picker if native dialog fails
+            triggerFilePicker();
+        }
+    }
+
+    async function fastPickFolder() {
+        showToast('📁 Opening Windows Folder Dialog (Direct CUT)...');
+        try {
+            const res = await fetch(`${API_BASE}/api/pick_and_cut_folder`, { method: 'POST' });
+            const data = await res.json();
+            if (data.ok) {
+                if (data.count > 0) {
+                    showToast(`✨ Directly CUT folder (${data.count} videos) into Media Queue!`);
+                    await loadFiles();
+                } else {
+                    showToast('ℹ️ No folder selected');
+                }
+            } else {
+                showToast(`❌ Cut error: ${data.error}`);
+            }
+        } catch (err) {
+            triggerFolderPicker();
+        }
     }
 
     // Window Drag & Drop Listeners
@@ -1266,6 +1348,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (btnEmptyAddFolder) {
         btnEmptyAddFolder.addEventListener('click', triggerFolderPicker);
+    }
+    if (btnFastCutFiles) {
+        btnFastCutFiles.addEventListener('click', fastPickFiles);
+    }
+    if (btnEmptyFastCut) {
+        btnEmptyFastCut.addEventListener('click', fastPickFiles);
     }
 
     if (filePickerInput) {

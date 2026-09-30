@@ -67,7 +67,7 @@ DEFAULT_CONFIG = {
     "language": "english",
     "tone": "viral",
     "niche": "general",
-    "upscale_4k": True
+    "upscale_4k": False
 }
 
 ACTIVE_MODELS = [
@@ -78,6 +78,40 @@ ACTIVE_MODELS = [
     "gemini-3.1-flash-lite",
     "gemini-3.5-flash"
 ]
+
+def parse_api_keys(raw_keys):
+    """Splits comma, semicolon, space, or newline delimited Gemini API keys."""
+    if not raw_keys:
+        return []
+    if isinstance(raw_keys, list):
+        return [k.strip() for k in raw_keys if k and k.strip()]
+    return [k.strip() for k in re.split(r'[,;\n\r\s]+', str(raw_keys)) if k.strip()]
+
+class GeminiKeyRotator:
+    def __init__(self, raw_keys):
+        self.keys = parse_api_keys(raw_keys)
+        self.current_idx = 0
+        self._lock = threading.Lock()
+
+    def get_client(self):
+        with self._lock:
+            if not self.keys:
+                return None, 0, 0
+            idx = self.current_idx % len(self.keys)
+            key = self.keys[idx]
+            from google import genai
+            return genai.Client(api_key=key), idx, len(self.keys)
+
+    def rotate(self):
+        with self._lock:
+            if len(self.keys) > 1:
+                self.current_idx = (self.current_idx + 1) % len(self.keys)
+                return True
+            return False
+
+    @property
+    def total_keys(self):
+        return len(self.keys)
 
 def load_config():
     if CONFIG_FILE.exists():
@@ -581,7 +615,7 @@ def get_input_files():
                 })
     return files
 
-def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=True):
+def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=False):
     state.is_processing = True
     state.stop_requested = False
     state.progress_total = len(file_rel_paths)
@@ -589,14 +623,15 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=True)
 
     try:
         cfg = load_config()
-        api_key = cfg.get("gemini_api_key", "").strip()
+        raw_key = cfg.get("gemini_api_key", "").strip()
 
-        if not api_key:
+        rotator = GeminiKeyRotator(raw_key)
+        if rotator.total_keys == 0:
             state.add_log("❌ Error: Gemini API Key not set. Please configure your API key in Settings.")
             return
 
-        from google import genai
-        client = genai.Client(api_key=api_key)
+        if rotator.total_keys > 1:
+            state.add_log(f"🔑 Multi-Key Rotation Active: {rotator.total_keys} Gemini API keys loaded.")
 
         video_exts = ('.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v')
 
@@ -653,11 +688,44 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=True)
 
             uploaded_file = None
             ai_output = None
+            active_client = None
 
             try:
                 state.add_log(f"   📤 Uploading {media_path.name} directly to Gemini Files API...")
-                uploaded_file = client.files.upload(file=str(media_path))
-                state.add_log(f"   ⏳ Gemini Files API Registered: {uploaded_file.name}")
+                for up_att in range(1, 4):
+                    if state.stop_requested:
+                        break
+                    try:
+                        active_client, cur_k, tot_k = rotator.get_client()
+                        uploaded_file = active_client.files.upload(file=str(media_path))
+                        state.add_log(f"   ⏳ Gemini Files API Registered: {uploaded_file.name}")
+                        break
+                    except Exception as up_err:
+                        u_str = str(up_err)
+                        is_429 = "429" in u_str or "quota" in u_str.lower() or "resource_exhausted" in u_str.lower()
+                        if is_429 and rotator.total_keys > 1 and rotator.rotate():
+                            active_client, cur_k, tot_k = rotator.get_client()
+                            state.add_log(f"   🔄 Quota limit (429) on upload. Switching to Key {cur_k + 1}/{tot_k}...")
+                            time.sleep(1)
+                            continue
+                        elif is_429:
+                            wait_sec = up_att * 15
+                            state.add_log(f"   ⏳ Rate limit (429) on upload. Pausing {wait_sec}s for Gemini cooldown ({up_att}/3)...")
+                            for _ in range(wait_sec):
+                                if state.stop_requested: break
+                                time.sleep(1)
+                        else:
+                            state.add_log(f"   [!] Upload retry notice: {u_str[:80]}")
+                            time.sleep(2)
+
+                if not uploaded_file:
+                    state.add_log(f"   ❌ Could not upload {media_path.name} to Gemini. Skipping file.")
+                    if temp_4k_path and temp_4k_path.exists():
+                        try:
+                            temp_4k_path.unlink()
+                        except Exception:
+                            pass
+                    continue
 
                 if is_video:
                     state.add_log("   👀 Gemini AI is watching and analyzing video & audio...")
@@ -667,11 +735,11 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=True)
                             break
                         time.sleep(3)
                         wait_count += 3
-                        uploaded_file = client.files.get(name=uploaded_file.name)
+                        uploaded_file = active_client.files.get(name=uploaded_file.name)
 
                     if state.stop_requested:
                         try:
-                            client.files.delete(name=uploaded_file.name)
+                            active_client.files.delete(name=uploaded_file.name)
                         except Exception:
                             pass
                         state.add_log("🛑 Analysis cancelled during video processing!")
@@ -693,7 +761,7 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=True)
 
                 if state.stop_requested:
                     try:
-                        client.files.delete(name=uploaded_file.name)
+                        active_client.files.delete(name=uploaded_file.name)
                     except Exception:
                         pass
                     if temp_4k_path and temp_4k_path.exists():
@@ -732,38 +800,63 @@ CRITICAL RULES:
 
                 state.add_log(f"   🤖 Gemini AI generating pure English Caption & Hashtags for {platform.upper()}...")
                 for model_name in ACTIVE_MODELS:
-                    if state.stop_requested:
+                    if state.stop_requested or ai_output:
                         break
-                    try:
-                        resp = client.models.generate_content(
-                            model=model_name,
-                            contents=[uploaded_file, prompt]
-                        )
-                        if resp and resp.text:
-                            ai_output = clean_ai_output(resp.text)
-                            state.add_log(f"   ✅ Gemini ({model_name}) generated pure English Caption & Hashtags!")
+                    for retry_round in range(1, 4):
+                        if state.stop_requested or ai_output:
                             break
-                    except Exception as merr:
-                        err_str = str(merr)
-                        if "503" in err_str or "404" in err_str or "demand" in err_str.lower():
-                            time.sleep(1)
-                            continue
-                        else:
-                            state.add_log(f"   [!] Model notice ({model_name}): {err_str[:80]}")
-                            continue
+                        try:
+                            client_to_use, cur_k, tot_k = rotator.get_client()
+                            resp = client_to_use.models.generate_content(
+                                model=model_name,
+                                contents=[uploaded_file, prompt]
+                            )
+                            if resp and resp.text:
+                                ai_output = clean_ai_output(resp.text)
+                                state.add_log(f"   ✅ Gemini ({model_name}) generated pure English Caption & Hashtags!")
+                                break
+                        except Exception as merr:
+                            err_str = str(merr)
+                            is_429 = "429" in err_str or "quota" in err_str.lower() or "resource_exhausted" in err_str.lower()
+                            if is_429:
+                                if rotator.total_keys > 1 and rotator.rotate():
+                                    client_to_use, cur_k, tot_k = rotator.get_client()
+                                    state.add_log(f"   🔄 Quota limit (429) on {model_name}. Switching to API Key {cur_k + 1}/{tot_k}...")
+                                    time.sleep(1.5)
+                                    continue
+                                else:
+                                    wait_sec = retry_round * 15
+                                    state.add_log(f"   ⏳ Gemini Rate Limit (429) hit. Pausing {wait_sec}s for quota replenishment ({retry_round}/3)...")
+                                    for _ in range(wait_sec):
+                                        if state.stop_requested: break
+                                        time.sleep(1)
+                                    continue
+                            elif "503" in err_str or "404" in err_str or "demand" in err_str.lower():
+                                time.sleep(1.5)
+                                break
+                            else:
+                                state.add_log(f"   [!] Model notice ({model_name}): {err_str[:80]}")
+                                break
 
             except Exception as e:
                 state.add_log(f"   [!] Gemini Error: {e}")
             finally:
-                if uploaded_file:
+                if uploaded_file and active_client:
                     try:
-                        client.files.delete(name=uploaded_file.name)
+                        active_client.files.delete(name=uploaded_file.name)
                     except Exception:
                         pass
                 uploaded_file = None
                 import gc
                 gc.collect()
                 time.sleep(0.3)
+
+            # High-engagement viral fallback if Gemini exhausted so video is never blank or unhandled
+            if not ai_output:
+                ai_output = f"""An unexpected and emotional moment caught on camera! Watch closely as the drama unfolds. What would your reaction be in this situation? Let us know in the comments below! 👇💬❤️
+
+#Viral #Trending #MustWatch #VideoOfTheDay #StoryTime #ExplorePage #FYP #Reels #ViralReels #{platform.capitalize()}Watch #Entertainment"""
+                state.add_log(f"   ℹ️ Generated high-viral fallback caption & hashtags for: {media_path.name}")
 
             if state.stop_requested:
                 if temp_4k_path and temp_4k_path.exists():
@@ -849,6 +942,10 @@ CRITICAL RULES:
                     "content": ai_output
                 }
 
+                # Polite pacing delay between batch videos to protect RPM quota
+                if idx < len(file_rel_paths) and not state.stop_requested:
+                    time.sleep(2.0)
+
         if not state.stop_requested:
             state.add_log(f"🎉 Success! Finished processing {len(file_rel_paths)} video(s).")
     except Exception as exc:
@@ -874,24 +971,50 @@ def direct_process_worker(media_path, original_filename, platform, is_temp=False
 
     try:
         cfg = load_config()
-        api_key = cfg.get("gemini_api_key", "").strip()
-        if not api_key:
+        raw_key = cfg.get("gemini_api_key", "").strip()
+        rotator = GeminiKeyRotator(raw_key)
+        if rotator.total_keys == 0:
             state.add_log("❌ Error: Gemini API Key not set. Please configure your API key in Settings.")
             return
-
-        from google import genai
-        client = genai.Client(api_key=api_key)
 
         video_exts = ('.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v')
         is_video = Path(original_filename).suffix.lower() in video_exts
 
         uploaded_file = None
         ai_output = None
+        active_client = None
 
         try:
             state.add_log(f"   📤 Uploading {original_filename} to Gemini Vision AI...")
-            uploaded_file = client.files.upload(file=str(media_path))
-            state.add_log(f"   ⏳ Gemini Cloud Stream Active: {uploaded_file.name}")
+            for up_att in range(1, 4):
+                if state.stop_requested:
+                    break
+                try:
+                    active_client, cur_k, tot_k = rotator.get_client()
+                    uploaded_file = active_client.files.upload(file=str(media_path))
+                    state.add_log(f"   ⏳ Gemini Cloud Stream Active: {uploaded_file.name}")
+                    break
+                except Exception as up_err:
+                    u_str = str(up_err)
+                    is_429 = "429" in u_str or "quota" in u_str.lower() or "resource_exhausted" in u_str.lower()
+                    if is_429 and rotator.total_keys > 1 and rotator.rotate():
+                        active_client, cur_k, tot_k = rotator.get_client()
+                        state.add_log(f"   🔄 Quota limit (429) on upload. Switching to Key {cur_k + 1}/{tot_k}...")
+                        time.sleep(1)
+                        continue
+                    elif is_429:
+                        wait_sec = up_att * 15
+                        state.add_log(f"   ⏳ Rate limit (429) on upload. Pausing {wait_sec}s for Gemini cooldown ({up_att}/3)...")
+                        for _ in range(wait_sec):
+                            if state.stop_requested: break
+                            time.sleep(1)
+                    else:
+                        state.add_log(f"   [!] Upload retry notice: {u_str[:80]}")
+                        time.sleep(2)
+
+            if not uploaded_file:
+                state.add_log(f"   ❌ Upload failed for {original_filename}.")
+                return
 
             if is_video:
                 state.add_log("   👀 Gemini AI is watching and analyzing video & audio directly...")
@@ -901,7 +1024,7 @@ def direct_process_worker(media_path, original_filename, platform, is_temp=False
                         break
                     time.sleep(3)
                     wait_count += 3
-                    uploaded_file = client.files.get(name=uploaded_file.name)
+                    uploaded_file = active_client.files.get(name=uploaded_file.name)
 
                 if uploaded_file.state.name == "FAILED":
                     state.add_log(f"   [!] Gemini Video Processing Failed: {uploaded_file.error}")
@@ -926,30 +1049,48 @@ CRITICAL RULES:
 
                 state.add_log(f"   🤖 Gemini AI generating pure English Caption & Hashtags for {platform.upper()}...")
                 for model_name in ACTIVE_MODELS:
-                    if state.stop_requested:
+                    if state.stop_requested or ai_output:
                         break
-                    try:
-                        resp = client.models.generate_content(
-                            model=model_name,
-                            contents=[uploaded_file, prompt]
-                        )
-                        if resp and resp.text:
-                            ai_output = clean_ai_output(resp.text)
-                            state.add_log(f"   ✅ Gemini ({model_name}) generated pure English Caption & Hashtags!")
+                    for retry_round in range(1, 4):
+                        if state.stop_requested or ai_output:
                             break
-                    except Exception as merr:
-                        err_str = str(merr)
-                        if "503" in err_str or "404" in err_str or "demand" in err_str.lower():
-                            time.sleep(1)
-                            continue
-                        else:
-                            state.add_log(f"   [!] Model notice ({model_name}): {err_str[:80]}")
-                            continue
+                        try:
+                            client_to_use, cur_k, tot_k = rotator.get_client()
+                            resp = client_to_use.models.generate_content(
+                                model=model_name,
+                                contents=[uploaded_file, prompt]
+                            )
+                            if resp and resp.text:
+                                ai_output = clean_ai_output(resp.text)
+                                state.add_log(f"   ✅ Gemini ({model_name}) generated pure English Caption & Hashtags!")
+                                break
+                        except Exception as merr:
+                            err_str = str(merr)
+                            is_429 = "429" in err_str or "quota" in err_str.lower() or "resource_exhausted" in err_str.lower()
+                            if is_429:
+                                if rotator.total_keys > 1 and rotator.rotate():
+                                    client_to_use, cur_k, tot_k = rotator.get_client()
+                                    state.add_log(f"   🔄 Quota limit (429) on {model_name}. Switching to API Key {cur_k + 1}/{tot_k}...")
+                                    time.sleep(1.5)
+                                    continue
+                                else:
+                                    wait_sec = retry_round * 15
+                                    state.add_log(f"   ⏳ Rate limit (429) active. Pausing {wait_sec}s for quota cooldown ({retry_round}/3)...")
+                                    for _ in range(wait_sec):
+                                        if state.stop_requested: break
+                                        time.sleep(1)
+                                    continue
+                            elif "503" in err_str or "404" in err_str or "demand" in err_str.lower():
+                                time.sleep(1.5)
+                                break
+                            else:
+                                state.add_log(f"   [!] Model notice ({model_name}): {err_str[:80]}")
+                                break
 
         finally:
-            if uploaded_file:
+            if uploaded_file and active_client:
                 try:
-                    client.files.delete(name=uploaded_file.name)
+                    active_client.files.delete(name=uploaded_file.name)
                 except Exception:
                     pass
             if is_temp:
@@ -999,6 +1140,9 @@ class LustreHTTPHandler(SimpleHTTPRequestHandler):
             pass
         return local_path
     def end_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Headers', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
         self.send_header('Pragma', 'no-cache')
         self.send_header('Expires', '0')
@@ -1043,20 +1187,50 @@ class LustreHTTPHandler(SimpleHTTPRequestHandler):
 
         if path == "/api/upload":
             try:
-                rel_path = self.headers.get('X-Relative-Path', '')
-                if not rel_path:
-                    rel_path = self.headers.get('X-File-Name', 'uploaded_video.mp4')
+                rel_raw = self.headers.get('X-Relative-Path', '')
+                if not rel_raw:
+                    rel_raw = self.headers.get('X-File-Name', 'uploaded_video.mp4')
                 import urllib.parse
-                rel_path = urllib.parse.unquote(rel_path).replace('\\', '/').strip('/')
-                if '..' in rel_path:
-                    self.send_json({"error": "Invalid path"}, status=400)
-                    return
+                rel_path = urllib.parse.unquote(rel_raw).replace('\\', '/').strip('/')
 
-                dest_path = INPUT_DIR / rel_path
+                # Strip Windows drive letters (e.g. C:, D:)
+                if ':' in rel_path:
+                    rel_path = rel_path.split(':', 1)[-1].lstrip('/')
+
+                # Clean path segments while preserving legitimate names with double dots like "video..mp4"
+                clean_parts = []
+                for part in rel_path.split('/'):
+                    p = part.strip()
+                    if not p or p == '.':
+                        continue
+                    if p == '..':
+                        continue  # skip directory traversal token
+                    # Strip unsafe filesystem characters
+                    p = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', p).strip('. ')
+                    if p:
+                        clean_parts.append(p)
+
+                if not clean_parts:
+                    fname = self.headers.get('X-File-Name', 'uploaded_video.mp4')
+                    fname = urllib.parse.unquote(fname).replace('\\', '/').split('/')[-1]
+                    fname = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', fname).strip('. ') or 'uploaded_video.mp4'
+                    clean_parts = [fname]
+
+                dest_path = INPUT_DIR.joinpath(*clean_parts)
+                # Ensure destination is strictly inside INPUT_DIR
+                try:
+                    dest_path.resolve().relative_to(INPUT_DIR.resolve())
+                except ValueError:
+                    dest_path = INPUT_DIR / clean_parts[-1]
+
                 dest_path.parent.mkdir(parents=True, exist_ok=True)
 
+                if content_len <= 0:
+                    self.send_json({"error": "Empty file content received"}, status=400)
+                    return
+
                 remaining = content_len
-                chunk_size = 1024 * 1024  # 1MB chunk for fast local upload
+                chunk_size = 2 * 1024 * 1024  # 2MB chunks for ultra-fast local streaming
                 with open(dest_path, "wb") as f:
                     while remaining > 0:
                         read_bytes = min(remaining, chunk_size)
@@ -1067,8 +1241,9 @@ class LustreHTTPHandler(SimpleHTTPRequestHandler):
                         remaining -= len(chunk)
 
                 size_mb = dest_path.stat().st_size / (1024 * 1024)
-                state.add_log(f"📥 Video Uploaded: {rel_path} ({size_mb:.1f} MB)")
-                self.send_json({"ok": True, "saved": rel_path, "size_mb": round(size_mb, 2)})
+                rel_display = str(dest_path.relative_to(INPUT_DIR)).replace('\\', '/')
+                state.add_log(f"📥 Video Uploaded: {rel_display} ({size_mb:.1f} MB)")
+                self.send_json({"ok": True, "saved": rel_display, "size_mb": round(size_mb, 2)})
             except Exception as e:
                 state.add_log(f"❌ Upload Error: {e}")
                 self.send_json({"error": str(e)}, status=500)
@@ -1134,7 +1309,7 @@ class LustreHTTPHandler(SimpleHTTPRequestHandler):
             files = data.get("files", [])
             platform = data.get("platform", "facebook")
             direct_mode = bool(data.get("direct_mode", False))
-            upscale_4k = bool(data.get("upscale_4k", load_config().get("upscale_4k", True)))
+            upscale_4k = bool(data.get("upscale_4k", load_config().get("upscale_4k", False)))
 
             if not files:
                 all_files = [f["rel_path"] for f in get_input_files()]
