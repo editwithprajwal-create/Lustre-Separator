@@ -148,25 +148,25 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
     elif not caption:
         base_name = hashtags
     else:
-        candidate = f"{caption}\u2028{hashtags}"
+        candidate = f"{caption}   {hashtags}"
         if len(candidate) <= max_len:
             base_name = candidate
         else:
             tags = hashtags.split()
             tag_part = ' '.join(tags)
-            if len(tag_part) + 80 + 1 <= max_len:
-                avail_caption = max_len - len(tag_part) - 1
+            if len(tag_part) + 80 + 3 <= max_len:
+                avail_caption = max_len - len(tag_part) - 3
                 truncated = caption[:avail_caption]
                 last_space = truncated.rfind(' ')
                 if last_space > avail_caption // 2:
                     caption_part = truncated[:last_space].rstrip('. ')
                 else:
                     caption_part = truncated.rstrip('. ')
-                base_name = f"{caption_part}\u2028{tag_part}".strip()
+                base_name = f"{caption_part}   {tag_part}".strip()
             else:
                 selected_tags = []
                 t_len = 0
-                max_tag_budget = max_len - min(len(caption), 100) - 1
+                max_tag_budget = max_len - min(len(caption), 100) - 3
                 for t in tags:
                     if t_len + len(t) + 1 <= max_tag_budget:
                         selected_tags.append(t)
@@ -174,16 +174,16 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
                     else:
                         break
                 tag_part = ' '.join(selected_tags)
-                avail_caption = max_len - len(tag_part) - 1
+                avail_caption = max_len - len(tag_part) - 3
                 truncated = caption[:avail_caption]
                 last_space = truncated.rfind(' ')
                 if last_space > avail_caption // 2:
                     caption_part = truncated[:last_space].rstrip('. ')
                 else:
                     caption_part = truncated.rstrip('. ')
-                base_name = f"{caption_part}\u2028{tag_part}".strip()
+                base_name = f"{caption_part}   {tag_part}".strip()
 
-    base_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', base_name).strip().rstrip('. ')
+    base_name = re.sub(r'[<>:"/\\|?*\x00-\x1f\u2028\u2029\r\n]', '', base_name).strip().rstrip('. ')
     if len(base_name) > max_len:
         base_name = base_name[:max_len].rstrip('. ')
     if not base_name:
