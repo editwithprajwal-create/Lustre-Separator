@@ -46,6 +46,18 @@ if sys.platform.startswith('win'):
     except Exception:
         pass
 
+def run_silent_cmd(cmd, **kwargs):
+    """Executes a command with 100% guarantee of zero console/terminal popup or flicker."""
+    if sys.platform.startswith('win'):
+        kwargs["creationflags"] = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+        startupinfo = kwargs.get("startupinfo") or subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        kwargs["startupinfo"] = startupinfo
+    if "stdin" not in kwargs:
+        kwargs["stdin"] = subprocess.DEVNULL
+    return subprocess.run(cmd, **kwargs)
+
 # Base Directories
 if getattr(sys, 'frozen', False):
     BUNDLE_DIR = Path(getattr(sys, '_MEIPASS', Path(sys.executable).resolve().parent))
@@ -405,17 +417,11 @@ def safe_move_file(src, dst, max_retries=10, delay=0.3):
 def has_nvenc():
     """Detects if NVIDIA NVENC hardware encoder is available on the system."""
     try:
-        startupinfo = None
-        if sys.platform.startswith('win'):
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startupinfo.wShowWindow = subprocess.SW_HIDE
-        res = subprocess.run(
+        res = run_silent_cmd(
             ['ffmpeg', '-encoders'],
             capture_output=True,
             text=True,
-            timeout=5,
-            startupinfo=startupinfo
+            timeout=5
         )
         return 'h264_nvenc' in res.stdout
     except Exception:
@@ -455,14 +461,9 @@ def render_video_4k(input_path, output_path, log_callback=None):
     ]
     
     startupinfo = None
-    if sys.platform.startswith('win'):
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        startupinfo.wShowWindow = subprocess.SW_HIDE
-
     t0 = time.time()
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, startupinfo=startupinfo)
+        res = run_silent_cmd(cmd, capture_output=True, text=True)
         dur = time.time() - t0
         
         if res.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0:
@@ -483,7 +484,7 @@ def render_video_4k(input_path, output_path, log_callback=None):
                     '-movflags', '+faststart',
                     str(output_path)
                 ]
-                res_cpu = subprocess.run(cpu_cmd, capture_output=True, text=True, startupinfo=startupinfo)
+                res_cpu = run_silent_cmd(cpu_cmd, capture_output=True, text=True)
                 if res_cpu.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0:
                     if log_callback:
                         log_callback(f"4K CPU render completed in {time.time() - t0:.1f}s")
@@ -510,7 +511,7 @@ def native_pick_and_cut_files():
         "}"
     )
     try:
-        res = subprocess.run(
+        res = run_silent_cmd(
             ['powershell', '-Sta', '-NoProfile', '-Command', ps_cmd],
             capture_output=True,
             text=True,
@@ -543,7 +544,7 @@ def native_pick_and_cut_folder():
         "}"
     )
     try:
-        res = subprocess.run(
+        res = run_silent_cmd(
             ['powershell', '-Sta', '-NoProfile', '-Command', ps_cmd],
             capture_output=True,
             text=True,
@@ -1498,34 +1499,47 @@ class LustreHTTPHandler(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.end_headers()
 
-def check_startup_update():
-    time.sleep(2)
-    try:
-        info = auto_updater.check_for_updates()
-        state.update_info = info
-        if info.get("update_available"):
-            behind = info.get("behind_count", 1)
-            state.add_log(f"🚀 New update available from Git: {behind} new commit(s) ready to pull!")
-    except Exception:
-        pass
+import socket
 
 def free_port(port):
-    """If port is occupied by an orphaned process on Windows, terminate that process."""
+    """If port is occupied by an orphaned process on Windows, terminate that process silently without any console popup."""
     if not sys.platform.startswith('win'):
         return
     try:
-        import subprocess
+        # First test if port is in use using pure socket (zero subprocess overhead/flicker)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.1)
+            if s.connect_ex(('127.0.0.1', port)) != 0:
+                return  # Port is already free, do nothing
+    except Exception:
+        pass
+
+    try:
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+
         res = subprocess.run(
             ["netstat", "-ano"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, timeout=5,
+            startupinfo=startupinfo,
+            creationflags=creationflags,
+            stdin=subprocess.DEVNULL
         )
         for line in res.stdout.splitlines():
             if f":{port}" in line and "LISTENING" in line:
                 parts = line.strip().split()
                 pid = parts[-1]
                 if pid and pid.isdigit() and int(pid) != os.getpid():
-                    subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True, timeout=5)
-        time.sleep(0.5)
+                    subprocess.run(
+                        ["taskkill", "/F", "/PID", pid],
+                        capture_output=True, timeout=5,
+                        startupinfo=startupinfo,
+                        creationflags=creationflags,
+                        stdin=subprocess.DEVNULL
+                    )
+        time.sleep(0.3)
     except Exception:
         pass
 

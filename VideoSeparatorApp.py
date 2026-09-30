@@ -21,6 +21,18 @@ import subprocess
 import queue
 from pathlib import Path
 
+def run_silent_cmd(cmd, **kwargs):
+    """Executes a command with 100% guarantee of zero console/terminal popup or flicker."""
+    if sys.platform.startswith('win'):
+        kwargs["creationflags"] = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+        startupinfo = kwargs.get("startupinfo") or subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        kwargs["startupinfo"] = startupinfo
+    if "stdin" not in kwargs:
+        kwargs["stdin"] = subprocess.DEVNULL
+    return subprocess.run(cmd, **kwargs)
+
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext, filedialog
 
@@ -345,17 +357,11 @@ def safe_move_file(src, dst, max_retries=10, delay=0.3):
 def has_nvenc():
     """Detects if NVIDIA NVENC hardware encoder is available on the system."""
     try:
-        startupinfo = None
-        if sys.platform.startswith('win'):
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startupinfo.wShowWindow = subprocess.SW_HIDE
-        res = subprocess.run(
+        res = run_silent_cmd(
             ['ffmpeg', '-encoders'],
             capture_output=True,
             text=True,
-            timeout=5,
-            startupinfo=startupinfo
+            timeout=5
         )
         return 'h264_nvenc' in res.stdout
     except Exception:
@@ -390,15 +396,9 @@ def render_video_4k(input_path, output_path, log_callback=None):
         str(output_path)
     ]
     
-    startupinfo = None
-    if sys.platform.startswith('win'):
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        startupinfo.wShowWindow = subprocess.SW_HIDE
-
     t0 = time.time()
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, startupinfo=startupinfo)
+        res = run_silent_cmd(cmd, capture_output=True, text=True)
         dur = time.time() - t0
         
         if res.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0:
@@ -419,7 +419,7 @@ def render_video_4k(input_path, output_path, log_callback=None):
                     '-movflags', '+faststart',
                     str(output_path)
                 ]
-                res_cpu = subprocess.run(cpu_cmd, capture_output=True, text=True, startupinfo=startupinfo)
+                res_cpu = run_silent_cmd(cpu_cmd, capture_output=True, text=True)
                 if res_cpu.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0:
                     if log_callback:
                         log_callback(f"4K CPU render completed in {time.time() - t0:.1f}s")
