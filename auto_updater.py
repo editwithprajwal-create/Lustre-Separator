@@ -3,6 +3,7 @@
 """
 Auto-Updater Engine for Lustre Separator
 Supports Git-based auto-updates, commit tracking, and seamless background updates.
+Guaranteed 100% silent execution on Windows (zero black command prompt popups).
 """
 
 import os
@@ -24,6 +25,25 @@ DEFAULT_VERSION_DATA = {
     "channel": "stable"
 }
 
+def run_git_silent(args, cwd=WORKSPACE_DIR, timeout=15):
+    """
+    Executes a git command completely silently.
+    Guarantees no black terminal or git.exe window popups on Windows.
+    """
+    kwargs = {
+        "cwd": str(cwd),
+        "capture_output": True,
+        "text": True,
+        "timeout": timeout
+    }
+    if sys.platform.startswith('win'):
+        kwargs["creationflags"] = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        kwargs["startupinfo"] = startupinfo
+    return subprocess.run(args, **kwargs)
+
 def get_local_version():
     """Get the current application version."""
     if VERSION_FILE.exists():
@@ -37,7 +57,7 @@ def get_local_version():
 def is_git_installed():
     """Check if Git CLI is installed on this system."""
     try:
-        res = subprocess.run(["git", "--version"], capture_output=True, text=True, timeout=5)
+        res = run_git_silent(["git", "--version"], timeout=5)
         return res.returncode == 0
     except Exception:
         return False
@@ -59,23 +79,23 @@ def get_git_info():
         }
     try:
         # Current branch
-        branch_res = subprocess.run(
+        branch_res = run_git_silent(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=5
+            timeout=5
         )
         branch = branch_res.stdout.strip() or "main"
 
         # Current short commit
-        commit_res = subprocess.run(
+        commit_res = run_git_silent(
             ["git", "rev-parse", "--short", "HEAD"],
-            cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=5
+            timeout=5
         )
         commit = commit_res.stdout.strip() or "initial"
 
         # Remote URL
-        remote_res = subprocess.run(
+        remote_res = run_git_silent(
             ["git", "config", "--get", "remote.origin.url"],
-            cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=5
+            timeout=5
         )
         remote_url = remote_res.stdout.strip()
 
@@ -97,7 +117,7 @@ def get_git_info():
 
 def check_for_updates():
     """
-    Check if remote git updates are available.
+    Check if remote git updates are available completely silently.
     Returns dict with update status, commits behind, and details.
     """
     ver = get_local_version()
@@ -131,9 +151,9 @@ def check_for_updates():
 
     try:
         # Fetch remote updates silently with timeout
-        fetch_res = subprocess.run(
+        fetch_res = run_git_silent(
             ["git", "fetch", "origin"],
-            cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=15
+            timeout=15
         )
         if fetch_res.returncode != 0:
             return {
@@ -146,9 +166,9 @@ def check_for_updates():
 
         # Check commits behind (available to pull)
         branch = git_info.get("branch", "main")
-        behind_res = subprocess.run(
+        behind_res = run_git_silent(
             ["git", "rev-list", "--count", f"HEAD..origin/{branch}"],
-            cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=5
+            timeout=5
         )
 
         behind_count = 0
@@ -159,9 +179,9 @@ def check_for_updates():
                 behind_count = 0
 
         # Check commits ahead (ready to push to remote)
-        ahead_res = subprocess.run(
+        ahead_res = run_git_silent(
             ["git", "rev-list", "--count", f"origin/{branch}..HEAD"],
-            cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=5
+            timeout=5
         )
         ahead_count = 0
         if ahead_res.returncode == 0:
@@ -171,18 +191,18 @@ def check_for_updates():
                 ahead_count = 0
 
         # Check uncommitted modifications
-        status_res = subprocess.run(
+        status_res = run_git_silent(
             ["git", "status", "--porcelain"],
-            cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=5
+            timeout=5
         )
         has_uncommitted = bool(status_res.stdout.strip())
 
         # Retrieve commit logs of new updates if available
         commits_log = []
         if behind_count > 0:
-            log_res = subprocess.run(
+            log_res = run_git_silent(
                 ["git", "log", f"HEAD..origin/{branch}", "--oneline", "-n", "5"],
-                cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=5
+                timeout=5
             )
             if log_res.returncode == 0 and log_res.stdout:
                 commits_log = [line.strip() for line in log_res.stdout.strip().split("\n") if line.strip()]
@@ -240,17 +260,17 @@ def perform_update():
                 pass
 
         # Perform git pull with unrelated histories allowed if needed
-        pull_res = subprocess.run(
+        pull_res = run_git_silent(
             ["git", "pull", "--allow-unrelated-histories", "origin", branch],
-            cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=30
+            timeout=30
         )
 
         if pull_res.returncode != 0:
             # If there's a merge conflict or unstaged changes, try git stash then pull
-            subprocess.run(["git", "stash"], cwd=str(WORKSPACE_DIR), capture_output=True, timeout=10)
-            retry_res = subprocess.run(
+            run_git_silent(["git", "stash"], timeout=10)
+            retry_res = run_git_silent(
                 ["git", "pull", "--allow-unrelated-histories", "origin", branch],
-                cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=30
+                timeout=30
             )
             if retry_res.returncode != 0:
                 return {
@@ -292,19 +312,19 @@ def perform_push(commit_msg=None):
 
     try:
         # Check uncommitted changes
-        status_res = subprocess.run(
+        status_res = run_git_silent(
             ["git", "status", "--porcelain"],
-            cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=10
+            timeout=10
         )
         if status_res.stdout.strip():
-            subprocess.run(["git", "add", "-A"], cwd=str(WORKSPACE_DIR), capture_output=True, timeout=15)
+            run_git_silent(["git", "add", "-A"], timeout=15)
             msg = commit_msg or f"Update from Lustre Separator ({time.strftime('%Y-%m-%d %H:%M')})"
-            subprocess.run(["git", "commit", "-m", msg], cwd=str(WORKSPACE_DIR), capture_output=True, timeout=15)
+            run_git_silent(["git", "commit", "-m", msg], timeout=15)
 
         # Execute push
-        push_res = subprocess.run(
+        push_res = run_git_silent(
             ["git", "push", "origin", branch],
-            cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=120
+            timeout=120
         )
 
         if push_res.returncode != 0:
@@ -330,14 +350,14 @@ def initialize_git_remote(remote_url, branch="main"):
 
     try:
         if not is_git_repo():
-            subprocess.run(["git", "init"], cwd=str(WORKSPACE_DIR), capture_output=True, check=True)
-            subprocess.run(["git", "remote", "add", "origin", remote_url], cwd=str(WORKSPACE_DIR), capture_output=True, check=True)
+            run_git_silent(["git", "init"], timeout=10)
+            run_git_silent(["git", "remote", "add", "origin", remote_url], timeout=10)
         else:
             # Update remote url
-            subprocess.run(["git", "remote", "set-url", "origin", remote_url], cwd=str(WORKSPACE_DIR), capture_output=True)
+            run_git_silent(["git", "remote", "set-url", "origin", remote_url], timeout=10)
 
         # Set default branch
-        subprocess.run(["git", "branch", "-M", branch], cwd=str(WORKSPACE_DIR), capture_output=True)
+        run_git_silent(["git", "branch", "-M", branch], timeout=10)
 
         return {
             "ok": True,
