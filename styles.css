@@ -1333,6 +1333,18 @@ button:disabled {
     box-shadow: 0 0 20px rgba(212, 175, 55, 0.4);
 }
 
+#upscale4KBox.active {
+    border-color: rgba(56, 189, 248, 0.7);
+    background: linear-gradient(135deg, rgba(14, 30, 44, 0.98), rgba(8, 16, 26, 0.98));
+    box-shadow: 0 0 22px rgba(56, 189, 248, 0.35);
+}
+
+#upscale4KBox .switch-toggle input:checked + .switch-slider {
+    background: linear-gradient(135deg, #0284c7, #38bdf8);
+    border-color: #7dd3fc;
+    box-shadow: 0 0 14px rgba(56, 189, 248, 0.7);
+}
+
 .switch-toggle {
     position: relative;
     display: inline-block;

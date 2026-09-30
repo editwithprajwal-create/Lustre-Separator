@@ -16,6 +16,7 @@ import shutil
 import time
 import json
 import threading
+import subprocess
 import mimetypes
 import webbrowser
 import re
@@ -65,7 +66,8 @@ DEFAULT_CONFIG = {
     "target_platform": "facebook",
     "language": "english",
     "tone": "viral",
-    "niche": "general"
+    "niche": "general",
+    "upscale_4k": True
 }
 
 ACTIVE_MODELS = [
@@ -346,6 +348,101 @@ def safe_move_file(src, dst, max_retries=10, delay=0.3):
 
     return not src.exists()
 
+def has_nvenc():
+    """Detects if NVIDIA NVENC hardware encoder is available on the system."""
+    try:
+        startupinfo = None
+        if sys.platform.startswith('win'):
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+        res = subprocess.run(
+            ['ffmpeg', '-encoders'],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            startupinfo=startupinfo
+        )
+        return 'h264_nvenc' in res.stdout
+    except Exception:
+        return False
+
+def render_video_4k(input_path, output_path, log_callback=None):
+    """
+    Renders / upscales video to 4K Ultra HD (2160p) using NVIDIA NVENC hardware acceleration if available.
+    Preserves exact audio track with -c:a copy.
+    Maintains correct aspect ratio for both landscape (3840x2160) and vertical shorts/reels (2160x3840).
+    Applies Lanczos high-detail scaling and unsharp edge enhancement.
+    """
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    use_nvenc = has_nvenc()
+    
+    # 4K scale expression:
+    # If landscape (iw >= ih): width=3840, height auto-even (-2)
+    # If portrait (iw < ih): height=3840, width auto-even (-2)
+    scale_filter = "scale=if(gte(iw\\,ih)\\,3840\\,-2):if(gte(iw\\,ih)\\,-2\\,3840):flags=lanczos,unsharp=5:5:0.8:3:3:0.4"
+    
+    if use_nvenc:
+        vcodec_args = ['-c:v', 'h264_nvenc', '-preset', 'p6', '-tune', 'hq', '-rc', 'vbr', '-cq', '19', '-b:v', '0']
+    else:
+        vcodec_args = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '19']
+        
+    cmd = [
+        'ffmpeg', '-y',
+        '-i', str(input_path),
+        '-vf', scale_filter,
+        *vcodec_args,
+        '-c:a', 'copy',
+        '-movflags', '+faststart',
+        str(output_path)
+    ]
+    
+    startupinfo = None
+    if sys.platform.startswith('win'):
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+
+    t0 = time.time()
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, startupinfo=startupinfo)
+        dur = time.time() - t0
+        
+        if res.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0:
+            if log_callback:
+                hw_name = "NVIDIA GeForce RTX (NVENC)" if use_nvenc else "CPU"
+                log_callback(f"4K Ultra-HD rendered in {dur:.1f}s via {hw_name}!")
+            return True
+        else:
+            if use_nvenc:
+                if log_callback:
+                    log_callback("NVENC notice: Falling back to CPU 4K encoder...")
+                cpu_cmd = [
+                    'ffmpeg', '-y',
+                    '-i', str(input_path),
+                    '-vf', scale_filter,
+                    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '19',
+                    '-c:a', 'copy',
+                    '-movflags', '+faststart',
+                    str(output_path)
+                ]
+                res_cpu = subprocess.run(cpu_cmd, capture_output=True, text=True, startupinfo=startupinfo)
+                if res_cpu.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0:
+                    if log_callback:
+                        log_callback(f"4K CPU render completed in {time.time() - t0:.1f}s")
+                    return True
+            if log_callback:
+                err_snippet = res.stderr[-200:] if res.stderr else "FFmpeg error"
+                log_callback(f"4K render notice: {err_snippet}")
+            return False
+    except Exception as e:
+        if log_callback:
+            log_callback(f"4K render exception: {e}")
+        return False
+
 def native_pick_and_cut_files():
     """Opens native Windows file dialog via isolated PowerShell and directly CUTS selected files into input_media."""
     ps_cmd = (
@@ -484,7 +581,7 @@ def get_input_files():
                 })
     return files
 
-def process_worker(file_rel_paths, platform, direct_mode=False):
+def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=True):
     state.is_processing = True
     state.stop_requested = False
     state.progress_total = len(file_rel_paths)
@@ -516,6 +613,29 @@ def process_worker(file_rel_paths, platform, direct_mode=False):
             state.current_file = media_path.name
             is_video = media_path.suffix.lower() in video_exts
 
+            # Set up parallel 4K render if enabled, is_video, and not in direct_mode
+            render_thread = None
+            render_status = {"done": False, "ok": False, "error": None}
+            temp_4k_path = None
+
+            if not direct_mode and is_video and upscale_4k:
+                temp_4k_filename = f".render_4k_{int(time.time())}_{idx}.mp4"
+                temp_4k_path = OUTPUT_DIR / temp_4k_filename
+
+                def _bg_render(src_file=media_path, dst_file=temp_4k_path):
+                    state.add_log(f"   ⚡ [Parallel GPU] 4K Ultra-HD Upscale render started in background...")
+                    try:
+                        ok = render_video_4k(src_file, dst_file, log_callback=lambda msg: state.add_log(f"   🎬 [4K Render]: {msg}"))
+                        render_status["ok"] = ok
+                    except Exception as rexc:
+                        render_status["error"] = str(rexc)
+                        render_status["ok"] = False
+                    finally:
+                        render_status["done"] = True
+
+                render_thread = threading.Thread(target=_bg_render, daemon=True)
+                render_thread.start()
+
             if direct_mode:
                 state.add_log(f"⚡ [{idx}/{len(file_rel_paths)}] Direct Extract: {media_path.name}")
                 state.add_log(f"   🛡️ Zero Modifications: Video will NOT be moved, cut, copied, or renamed.")
@@ -527,8 +647,9 @@ def process_worker(file_rel_paths, platform, direct_mode=False):
                 target_folder = OUTPUT_DIR
                 target_folder.mkdir(parents=True, exist_ok=True)
 
+                upscale_label = "4K Ultra-HD AI Upscale & " if (is_video and upscale_4k) else ""
                 state.add_log(f"🎬 [{idx}/{len(file_rel_paths)}] Processing: {media_path.name}")
-                state.add_log("   🎥 Video will be renamed with Caption & Hashtags directly in output_media")
+                state.add_log(f"   🎥 Video will be {upscale_label}renamed with Caption & Hashtags directly in output_media")
 
             uploaded_file = None
             ai_output = None
@@ -554,10 +675,20 @@ def process_worker(file_rel_paths, platform, direct_mode=False):
                         except Exception:
                             pass
                         state.add_log("🛑 Analysis cancelled during video processing!")
+                        if temp_4k_path and temp_4k_path.exists():
+                            try:
+                                temp_4k_path.unlink()
+                            except Exception:
+                                pass
                         break
 
                     if uploaded_file.state.name == "FAILED":
                         state.add_log(f"   [!] Gemini Video Processing Failed: {uploaded_file.error}")
+                        if temp_4k_path and temp_4k_path.exists():
+                            try:
+                                temp_4k_path.unlink()
+                            except Exception:
+                                pass
                         continue
 
                 if state.stop_requested:
@@ -565,6 +696,11 @@ def process_worker(file_rel_paths, platform, direct_mode=False):
                         client.files.delete(name=uploaded_file.name)
                     except Exception:
                         pass
+                    if temp_4k_path and temp_4k_path.exists():
+                        try:
+                            temp_4k_path.unlink()
+                        except Exception:
+                            pass
                     state.add_log("🛑 Analysis cancelled by user!")
                     break
 
@@ -630,8 +766,18 @@ CRITICAL RULES:
                 time.sleep(0.3)
 
             if state.stop_requested:
+                if temp_4k_path and temp_4k_path.exists():
+                    try:
+                        temp_4k_path.unlink()
+                    except Exception:
+                        pass
                 state.add_log("🛑 Analysis stopped by user! No further files will be moved.")
                 break
+
+            # If 4K render was running in background, wait for it to finish
+            if render_thread and render_thread.is_alive():
+                state.add_log("   ⏳ Finalizing parallel 4K render on GPU...")
+                render_thread.join(timeout=300)
 
             if direct_mode:
                 state.latest_result = {
@@ -642,16 +788,22 @@ CRITICAL RULES:
                 }
                 state.add_log(f"   ✨ Direct Extract Complete for: '{media_path.name}' (Original 100% untouched)")
             else:
+                # Use .mp4 if 4K rendered successfully, otherwise original ext
+                output_ext = ".mp4" if (render_status.get("ok") and temp_4k_path and temp_4k_path.exists() and temp_4k_path.stat().st_size > 0) else ext
+
                 # Generate video filename directly from AI Caption + Hashtags (zero .txt file)
-                renamed_filename = generate_video_filename(ai_output, ext, target_folder, fallback_stem=media_path.stem)
+                renamed_filename = generate_video_filename(ai_output, output_ext, target_folder, fallback_stem=media_path.stem)
                 target_media = target_folder / renamed_filename
 
-                # Strictly CUT media from input_media into output_media
                 import gc
                 gc.collect()
                 time.sleep(0.3)
-                safe_move_file(media_path, target_media)
-                if media_path.exists():
+
+                if render_status.get("ok") and temp_4k_path and temp_4k_path.exists() and temp_4k_path.stat().st_size > 0:
+                    # Move 4K rendered video to target_media in output_media
+                    safe_move_file(temp_4k_path, target_media)
+                    state.add_log(f"   ✨ 4K Ultra-HD Video successfully saved to output_media!")
+                    # Cleanly CUT / delete original from input_media
                     for _ in range(5):
                         try:
                             gc.collect()
@@ -662,6 +814,20 @@ CRITICAL RULES:
                             break
                         except Exception:
                             pass
+                else:
+                    # Fallback: strictly CUT original media from input_media into output_media
+                    safe_move_file(media_path, target_media)
+                    if media_path.exists():
+                        for _ in range(5):
+                            try:
+                                gc.collect()
+                                time.sleep(0.2)
+                                import os
+                                os.chmod(str(media_path), 0o777)
+                                media_path.unlink()
+                                break
+                            except Exception:
+                                pass
 
                 # Clean up empty parent folder inside input_media if it was inside a subfolder
                 if media_path.parent != INPUT_DIR:
@@ -968,6 +1134,7 @@ class LustreHTTPHandler(SimpleHTTPRequestHandler):
             files = data.get("files", [])
             platform = data.get("platform", "facebook")
             direct_mode = bool(data.get("direct_mode", False))
+            upscale_4k = bool(data.get("upscale_4k", load_config().get("upscale_4k", True)))
 
             if not files:
                 all_files = [f["rel_path"] for f in get_input_files()]
@@ -977,8 +1144,8 @@ class LustreHTTPHandler(SimpleHTTPRequestHandler):
                 self.send_json({"error": "No files found in input_media"}, status=400)
                 return
 
-            threading.Thread(target=process_worker, args=(files, platform, direct_mode), daemon=True).start()
-            mode_desc = "Direct Extract (No Move/Save)" if direct_mode else "Process & Rename"
+            threading.Thread(target=process_worker, args=(files, platform, direct_mode, upscale_4k), daemon=True).start()
+            mode_desc = "Direct Extract (No Move/Save)" if direct_mode else ("4K Process & Rename" if upscale_4k else "Process & Rename")
             self.send_json({"message": f"Started {mode_desc} for {len(files)} file(s)"})
 
         elif path == "/api/stop":

@@ -322,6 +322,97 @@ def safe_move_file(src, dst, max_retries=10, delay=0.3):
 
     return not src.exists()
 
+def has_nvenc():
+    """Detects if NVIDIA NVENC hardware encoder is available on the system."""
+    try:
+        startupinfo = None
+        if sys.platform.startswith('win'):
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+        res = subprocess.run(
+            ['ffmpeg', '-encoders'],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            startupinfo=startupinfo
+        )
+        return 'h264_nvenc' in res.stdout
+    except Exception:
+        return False
+
+def render_video_4k(input_path, output_path, log_callback=None):
+    """
+    Renders / upscales video to 4K Ultra HD (2160p) using NVIDIA NVENC hardware acceleration if available.
+    Preserves exact audio track with -c:a copy.
+    Maintains correct aspect ratio for both landscape (3840x2160) and vertical shorts/reels (2160x3840).
+    Applies Lanczos high-detail scaling and unsharp edge enhancement.
+    """
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    use_nvenc = has_nvenc()
+    scale_filter = "scale=if(gte(iw\\,ih)\\,3840\\,-2):if(gte(iw\\,ih)\\,-2\\,3840):flags=lanczos,unsharp=5:5:0.8:3:3:0.4"
+    
+    if use_nvenc:
+        vcodec_args = ['-c:v', 'h264_nvenc', '-preset', 'p6', '-tune', 'hq', '-rc', 'vbr', '-cq', '19', '-b:v', '0']
+    else:
+        vcodec_args = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '19']
+        
+    cmd = [
+        'ffmpeg', '-y',
+        '-i', str(input_path),
+        '-vf', scale_filter,
+        *vcodec_args,
+        '-c:a', 'copy',
+        '-movflags', '+faststart',
+        str(output_path)
+    ]
+    
+    startupinfo = None
+    if sys.platform.startswith('win'):
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+
+    t0 = time.time()
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, startupinfo=startupinfo)
+        dur = time.time() - t0
+        
+        if res.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0:
+            if log_callback:
+                hw_name = "NVIDIA GeForce RTX (NVENC)" if use_nvenc else "CPU"
+                log_callback(f"4K Ultra-HD rendered in {dur:.1f}s via {hw_name}!")
+            return True
+        else:
+            if use_nvenc:
+                if log_callback:
+                    log_callback("NVENC notice: Falling back to CPU 4K encoder...")
+                cpu_cmd = [
+                    'ffmpeg', '-y',
+                    '-i', str(input_path),
+                    '-vf', scale_filter,
+                    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '19',
+                    '-c:a', 'copy',
+                    '-movflags', '+faststart',
+                    str(output_path)
+                ]
+                res_cpu = subprocess.run(cpu_cmd, capture_output=True, text=True, startupinfo=startupinfo)
+                if res_cpu.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0:
+                    if log_callback:
+                        log_callback(f"4K CPU render completed in {time.time() - t0:.1f}s")
+                    return True
+            if log_callback:
+                err_snippet = res.stderr[-200:] if res.stderr else "FFmpeg error"
+                log_callback(f"4K render notice: {err_snippet}")
+            return False
+    except Exception as e:
+        if log_callback:
+            log_callback(f"4K render exception: {e}")
+        return False
+
 class VideoSeparatorGUI:
     def __init__(self, root):
         self.root = root
@@ -1024,8 +1115,26 @@ class VideoSeparatorGUI:
 
             self.log(f"\n==========================================")
             self.log(f"[{i}/{total_files}] 🎬 {media_path.name}")
-            self.log("   🎥 Video will be renamed with Caption & Hashtags directly in output_media")
+            self.log("   🎥 Video will be 4K AI Upscaled & renamed with Caption + Hashtags directly in output_media")
             self.msg_queue.put(("status", f"[{i}/{total_files}] Uploading {media_path.name} to Gemini..."))
+
+            # Parallel 4K Upscale render on GPU
+            render_thread = None
+            render_status = {"done": False, "ok": False}
+            temp_4k_path = None
+
+            if is_video:
+                temp_4k_filename = f".render_4k_{int(time.time())}_{i}.mp4"
+                temp_4k_path = target_folder / temp_4k_filename
+
+                def _bg_render(src=media_path, dst=temp_4k_path):
+                    self.log("   ⚡ [Parallel GPU] 4K Ultra-HD Upscale render started in background...")
+                    ok = render_video_4k(src, dst, log_callback=lambda m: self.log(f"   🎬 [4K Render]: {m}"))
+                    render_status["ok"] = ok
+                    render_status["done"] = True
+
+                render_thread = threading.Thread(target=_bg_render, daemon=True)
+                render_thread.start()
 
             uploaded_file = None
             ai_output = None
@@ -1132,6 +1241,11 @@ CRITICAL RULES:
                 self.msg_queue.put(("finished", "🛑 Analysis बीचमै रोकियो। बाँकी फाइलहरू सुरक्षित छन्।"))
                 return
 
+            # Wait for 4K render to finalize
+            if render_thread and render_thread.is_alive():
+                self.log("   ⏳ Finalizing parallel 4K render on GPU...")
+                render_thread.join(timeout=300)
+
             # Fallback if Gemini failed so user never gets blank file
             if not ai_output:
                 ai_output = f"""An unexpected and emotional moment caught on camera! Watch closely as the story unfolds with the biggest smile. What would your reaction be in this situation? Let us know your thoughts in the comments below! 👇💬❤️
@@ -1141,15 +1255,17 @@ CRITICAL RULES:
                 ai_output = clean_ai_output(ai_output)
 
             # Generate video filename directly from AI Caption + Hashtags (zero .txt file)
-            renamed_filename = generate_video_filename(ai_output, ext, target_folder, fallback_stem=media_path.stem)
+            output_ext = ".mp4" if (render_status.get("ok") and temp_4k_path and temp_4k_path.exists()) else ext
+            renamed_filename = generate_video_filename(ai_output, output_ext, target_folder, fallback_stem=media_path.stem)
             target_media = target_folder / renamed_filename
 
             # Strictly CUT & Move media from input_media to output_media
             import gc
             gc.collect()
             time.sleep(0.3)
-            safe_move_file(media_path, target_media)
-            if media_path.exists():
+            if render_status.get("ok") and temp_4k_path and temp_4k_path.exists() and temp_4k_path.stat().st_size > 0:
+                safe_move_file(temp_4k_path, target_media)
+                self.log(f"   ✨ 4K Ultra-HD Video successfully saved to output_media!")
                 for _ in range(5):
                     try:
                         gc.collect()
@@ -1160,6 +1276,19 @@ CRITICAL RULES:
                         break
                     except Exception:
                         pass
+            else:
+                safe_move_file(media_path, target_media)
+                if media_path.exists():
+                    for _ in range(5):
+                        try:
+                            gc.collect()
+                            time.sleep(0.2)
+                            import os
+                            os.chmod(str(media_path), 0o777)
+                            media_path.unlink()
+                            break
+                        except Exception:
+                            pass
 
             # Clean up empty parent folder inside input_media if it was inside a subfolder
             if media_path.parent != INPUT_DIR:

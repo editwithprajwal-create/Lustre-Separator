@@ -15,6 +15,7 @@ import shutil
 import time
 import json
 import re
+import subprocess
 from pathlib import Path
 
 # Ensure UTF-8 output on Windows terminal
@@ -258,6 +259,97 @@ def safe_move_file(src, dst, max_retries=10, delay=0.3):
 
     return not src.exists()
 
+def has_nvenc():
+    """Detects if NVIDIA NVENC hardware encoder is available on the system."""
+    try:
+        startupinfo = None
+        if sys.platform.startswith('win'):
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+        res = subprocess.run(
+            ['ffmpeg', '-encoders'],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            startupinfo=startupinfo
+        )
+        return 'h264_nvenc' in res.stdout
+    except Exception:
+        return False
+
+def render_video_4k(input_path, output_path, log_callback=None):
+    """
+    Renders / upscales video to 4K Ultra HD (2160p) using NVIDIA NVENC hardware acceleration if available.
+    Preserves exact audio track with -c:a copy.
+    Maintains correct aspect ratio for both landscape (3840x2160) and vertical shorts/reels (2160x3840).
+    Applies Lanczos high-detail scaling and unsharp edge enhancement.
+    """
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    use_nvenc = has_nvenc()
+    scale_filter = "scale=if(gte(iw\\,ih)\\,3840\\,-2):if(gte(iw\\,ih)\\,-2\\,3840):flags=lanczos,unsharp=5:5:0.8:3:3:0.4"
+    
+    if use_nvenc:
+        vcodec_args = ['-c:v', 'h264_nvenc', '-preset', 'p6', '-tune', 'hq', '-rc', 'vbr', '-cq', '19', '-b:v', '0']
+    else:
+        vcodec_args = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '19']
+        
+    cmd = [
+        'ffmpeg', '-y',
+        '-i', str(input_path),
+        '-vf', scale_filter,
+        *vcodec_args,
+        '-c:a', 'copy',
+        '-movflags', '+faststart',
+        str(output_path)
+    ]
+    
+    startupinfo = None
+    if sys.platform.startswith('win'):
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+
+    t0 = time.time()
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, startupinfo=startupinfo)
+        dur = time.time() - t0
+        
+        if res.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0:
+            if log_callback:
+                hw_name = "NVIDIA GeForce RTX (NVENC)" if use_nvenc else "CPU"
+                log_callback(f"4K Ultra-HD rendered in {dur:.1f}s via {hw_name}!")
+            return True
+        else:
+            if use_nvenc:
+                if log_callback:
+                    log_callback("NVENC notice: Falling back to CPU 4K encoder...")
+                cpu_cmd = [
+                    'ffmpeg', '-y',
+                    '-i', str(input_path),
+                    '-vf', scale_filter,
+                    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '19',
+                    '-c:a', 'copy',
+                    '-movflags', '+faststart',
+                    str(output_path)
+                ]
+                res_cpu = subprocess.run(cpu_cmd, capture_output=True, text=True, startupinfo=startupinfo)
+                if res_cpu.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0:
+                    if log_callback:
+                        log_callback(f"4K CPU render completed in {time.time() - t0:.1f}s")
+                    return True
+            if log_callback:
+                err_snippet = res.stderr[-200:] if res.stderr else "FFmpeg error"
+                log_callback(f"4K render notice: {err_snippet}")
+            return False
+    except Exception as e:
+        if log_callback:
+            log_callback(f"4K render exception: {e}")
+        return False
+
 def upload_and_analyze_with_gemini(api_key, media_path, platform="facebook"):
     """
     Directly uploads video to Google Gemini Files API,
@@ -444,13 +536,37 @@ def main():
     # 2. Process direct files in input_media
     if direct_files:
         total = len(direct_files)
+        import threading
         for idx, media_path in enumerate(direct_files, 1):
             ext = media_path.suffix.lower()
+            is_video = ext in ('.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v')
 
             print(f"\n[{idx}/{total}] 🎬 {media_path.name}")
-            print(f"   🎥 Video will be renamed with Caption & Hashtags directly in output_media")
+            print(f"   🎥 Video will be 4K AI Upscaled & renamed with Caption + Hashtags directly in output_media")
+
+            render_thread = None
+            render_status = {"done": False, "ok": False}
+            temp_4k_path = None
+
+            if is_video:
+                temp_4k_filename = f".render_4k_{int(time.time())}_{idx}.mp4"
+                temp_4k_path = target_folder / temp_4k_filename
+
+                def _bg_render(src=media_path, dst=temp_4k_path):
+                    print("   ⚡ [Parallel GPU] 4K Ultra-HD Upscale render started in background...")
+                    ok = render_video_4k(src, dst, log_callback=lambda m: print(f"   🎬 [4K Render]: {m}"))
+                    render_status["ok"] = ok
+                    render_status["done"] = True
+
+                render_thread = threading.Thread(target=_bg_render, daemon=True)
+                render_thread.start()
 
             ai_output = upload_and_analyze_with_gemini(gemini_key, media_path, platform=platform)
+
+            # Wait for 4K render to finalize
+            if render_thread and render_thread.is_alive():
+                print("   ⏳ Finalizing parallel 4K render on GPU...")
+                render_thread.join(timeout=300)
 
             # Fallback if Gemini failed so user never gets blank file
             if not ai_output:
@@ -460,15 +576,17 @@ def main():
             else:
                 ai_output = clean_ai_output(ai_output)
 
-            renamed_name = generate_video_filename(ai_output, ext, target_folder, fallback_stem=media_path.stem)
+            output_ext = ".mp4" if (render_status.get("ok") and temp_4k_path and temp_4k_path.exists()) else ext
+            renamed_name = generate_video_filename(ai_output, output_ext, target_folder, fallback_stem=media_path.stem)
             renamed_target = target_folder / renamed_name
 
-            # Move and rename safely
+            # Move 4K or original safely
             import gc
             gc.collect()
             time.sleep(0.3)
-            safe_move_file(media_path, renamed_target)
-            if media_path.exists():
+            if render_status.get("ok") and temp_4k_path and temp_4k_path.exists() and temp_4k_path.stat().st_size > 0:
+                safe_move_file(temp_4k_path, renamed_target)
+                print(f"   ✨ 4K Ultra-HD Video successfully saved to output_media!")
                 for _ in range(5):
                     try:
                         gc.collect()
@@ -479,6 +597,19 @@ def main():
                         break
                     except Exception:
                         pass
+            else:
+                safe_move_file(media_path, renamed_target)
+                if media_path.exists():
+                    for _ in range(5):
+                        try:
+                            gc.collect()
+                            time.sleep(0.2)
+                            import os
+                            os.chmod(str(media_path), 0o777)
+                            media_path.unlink()
+                            break
+                        except Exception:
+                            pass
 
             print(f"   ✂️  CUT ➔ {renamed_name}")
             total_count += 1

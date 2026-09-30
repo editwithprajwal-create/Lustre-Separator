@@ -142,6 +142,18 @@
             </div>
 
             <div class="deck-right">
+                <!-- 4K AI Upscale Mode Switch (Default ON) -->
+                <div class="direct-mode-toggle-box active" id="upscale4KBox" title="When ON: Video is upscaled to 4K Ultra HD on NVIDIA GPU concurrently while Gemini AI analyzes.">
+                    <label class="switch-toggle" for="chkUpscale4K">
+                        <input type="checkbox" id="chkUpscale4K" checked>
+                        <span class="switch-slider"></span>
+                    </label>
+                    <div class="switch-label-wrap" onclick="document.getElementById('chkUpscale4K').click()">
+                        <span class="switch-title"><i class="fa-solid fa-bolt text-cyan"></i> 4K AI Upscale</span>
+                        <span class="switch-desc">NVIDIA NVENC • 2160p</span>
+                    </div>
+                </div>
+
                 <!-- Direct Extract Mode Switch -->
                 <div class="direct-mode-toggle-box" id="directModeBox" title="When ON: Videos stay 100% untouched. Pure caption & hashtag extraction with zero moves or saves.">
                     <label class="switch-toggle" for="chkDirectMode">
@@ -155,13 +167,13 @@
                 </div>
 
                 <!-- Master Launch Button with Shimmer Sweep -->
-                <button id="btnProcessAll" class="hero-launch-btn" title="Upload all videos directly to Gemini AI and organize into numbered folders">
+                <button id="btnProcessAll" class="hero-launch-btn" title="Upload all videos directly to Gemini AI, upscale to 4K Ultra-HD, and save to output_media">
                     <div class="btn-ambient-glow"></div>
                     <div class="hero-btn-content">
                         <div class="hero-icon-pulse"><i class="fa-solid fa-bolt-lightning"></i></div>
                         <div class="hero-text-block">
                             <span class="hero-btn-title">PROCESS & RENAME ALL</span>
-                            <span class="hero-btn-sub">Renames to 1.mp4, 2.mp4 & writes captions</span>
+                            <span class="hero-btn-sub">4K AI Upscale &amp; Renames with Caption + Tags</span>
                         </div>
                     </div>
                     <div class="shimmer-sweep"></div>

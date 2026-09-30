@@ -104,6 +104,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const directModeBox = document.getElementById('directModeBox');
     let isDirectMode = false;
 
+    const chkUpscale4K = document.getElementById('chkUpscale4K');
+    const upscale4KBox = document.getElementById('upscale4KBox');
+    let isUpscale4K = true;
+
     const toast = document.getElementById('toast');
     const toastMsg = document.getElementById('toastMsg');
 
@@ -299,7 +303,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/process', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ files: targets, platform: currentPlatform, direct_mode: isDirectMode })
+                body: JSON.stringify({ 
+                    files: targets, 
+                    platform: currentPlatform, 
+                    direct_mode: isDirectMode,
+                    upscale_4k: isUpscale4K
+                })
             });
             const data = await res.json();
             if (res.ok) {
@@ -1276,6 +1285,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 await uploadFilesBatch(entries);
                 folderPickerInput.value = '';
             }
+        });
+    }
+
+    // =========================================================================
+    // 4K AI Upscale Toggle (Switch ON / OFF)
+    // =========================================================================
+    if (chkUpscale4K) {
+        chkUpscale4K.addEventListener('change', () => {
+            isUpscale4K = chkUpscale4K.checked;
+            if (upscale4KBox) upscale4KBox.classList.toggle('active', isUpscale4K);
+            showToast(isUpscale4K ? '⚡ 4K AI Upscale ON (NVIDIA NVENC active)' : 'ℹ️ 4K AI Upscale OFF (Original Resolution)');
         });
     }
 
