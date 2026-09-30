@@ -119,13 +119,13 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
     elif not caption:
         base_name = hashtags
     else:
-        candidate = f"{caption} {hashtags}"
+        candidate = f"{caption}\u2028{hashtags}"
         if len(candidate) <= max_len:
             base_name = candidate
         else:
             tags = hashtags.split()
             tag_part = ' '.join(tags)
-            if len(tag_part) + 80 <= max_len:
+            if len(tag_part) + 80 + 1 <= max_len:
                 avail_caption = max_len - len(tag_part) - 1
                 truncated = caption[:avail_caption]
                 last_space = truncated.rfind(' ')
@@ -133,7 +133,7 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
                     caption_part = truncated[:last_space].rstrip('. ')
                 else:
                     caption_part = truncated.rstrip('. ')
-                base_name = f"{caption_part} {tag_part}".strip()
+                base_name = f"{caption_part}\u2028{tag_part}".strip()
             else:
                 selected_tags = []
                 t_len = 0
@@ -152,7 +152,7 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
                     caption_part = truncated[:last_space].rstrip('. ')
                 else:
                     caption_part = truncated.rstrip('. ')
-                base_name = f"{caption_part} {tag_part}".strip()
+                base_name = f"{caption_part}\u2028{tag_part}".strip()
 
     base_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', base_name).strip().rstrip('. ')
     if len(base_name) > max_len:
@@ -376,7 +376,7 @@ def main():
             # Move and rename safely
             safe_move_file(media_path, renamed_target)
 
-            print(f"   ✂️  CUT ➔ output_media/{renamed_name}")
+            print(f"   ✂️  CUT ➔ {renamed_name}")
             total_count += 1
 
         try:
@@ -409,7 +409,7 @@ def main():
             # Move and rename safely
             safe_move_file(media_path, renamed_target)
 
-            print(f"   ✂️  CUT ➔ output_media/{renamed_name}")
+            print(f"   ✂️  CUT ➔ {renamed_name}")
             total_count += 1
 
     print("\n" + "=" * 68)
