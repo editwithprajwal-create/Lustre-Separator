@@ -134,7 +134,7 @@ def split_caption_and_hashtags(text):
     hashtag_str = ' '.join(hashtags)
     return caption_part, hashtag_str
 
-def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=240):
+def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=248):
     ext = ext.lower() if ext else ".mp4"
     if not ext.startswith("."):
         ext = "." + ext
@@ -152,26 +152,36 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
         if len(candidate) <= max_len:
             base_name = candidate
         else:
-            selected_tags = []
-            tag_len = 0
-            for tag in hashtags.split():
-                if tag_len + len(tag) + 1 <= 85:
-                    selected_tags.append(tag)
-                    tag_len += len(tag) + 1
-                else:
-                    break
-            tag_part = ' '.join(selected_tags)
-            avail_for_caption = max_len - len(tag_part) - 1
-            if len(caption) > avail_for_caption:
-                truncated = caption[:avail_for_caption]
+            tags = hashtags.split()
+            tag_part = ' '.join(tags)
+            if len(tag_part) + 80 <= max_len:
+                avail_caption = max_len - len(tag_part) - 1
+                truncated = caption[:avail_caption]
                 last_space = truncated.rfind(' ')
-                if last_space > avail_for_caption // 2:
+                if last_space > avail_caption // 2:
                     caption_part = truncated[:last_space].rstrip('. ')
                 else:
                     caption_part = truncated.rstrip('. ')
+                base_name = f"{caption_part} {tag_part}".strip()
             else:
-                caption_part = caption
-            base_name = f"{caption_part} {tag_part}".strip()
+                selected_tags = []
+                t_len = 0
+                max_tag_budget = max_len - min(len(caption), 100) - 1
+                for t in tags:
+                    if t_len + len(t) + 1 <= max_tag_budget:
+                        selected_tags.append(t)
+                        t_len += len(t) + 1
+                    else:
+                        break
+                tag_part = ' '.join(selected_tags)
+                avail_caption = max_len - len(tag_part) - 1
+                truncated = caption[:avail_caption]
+                last_space = truncated.rfind(' ')
+                if last_space > avail_caption // 2:
+                    caption_part = truncated[:last_space].rstrip('. ')
+                else:
+                    caption_part = truncated.rstrip('. ')
+                base_name = f"{caption_part} {tag_part}".strip()
 
     base_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', base_name).strip().rstrip('. ')
     if len(base_name) > max_len:
@@ -1650,20 +1660,13 @@ class LustreSeparatorApp:
                     self.log("   🛡️ Zero Disk Writes: No output folders or .txt files created on disk.")
                     self.msg_queue.put(("status", f"[{i}/{total_files}] ⚡ Direct AI Scan: {media_path.name}..."))
                 else:
-                    # Folder name stays UNCHANGED!
-                    if media_path.parent != INPUT_DIR:
-                        folder_name = media_path.parent.name
-                    else:
-                        folder_name = media_path.stem
-
                     ext = media_path.suffix.lower()
-                    target_folder = OUTPUT_DIR / folder_name
+                    target_folder = OUTPUT_DIR
                     target_folder.mkdir(parents=True, exist_ok=True)
 
                     self.log(f"\n" + "=" * 50)
                     self.log(f"[{i}/{total_files}] 🎬 Processing: {media_path.name}")
-                    self.log(f"   📁 Folder Name (Unchanged): {folder_name}/")
-                    self.log("   🎥 Video will be renamed with Caption & Hashtags")
+                    self.log("   🎥 Video will be renamed with Caption & Hashtags directly in output_media")
                     self.msg_queue.put(("status", f"[{i}/{total_files}] Uploading {media_path.name} to Gemini AI..."))
 
                 uploaded_file = None
@@ -1712,15 +1715,16 @@ FORMAT REQUIREMENTS:
 Provide ONLY the story-driven caption followed directly by hashtags.
 Do NOT include ANY section titles, labels, or prefixes (Do NOT write '🎯 HOOK:', '📌 CAPTION:', '🏷️ HASHTAGS:', 'Caption:', 'Hook:', etc.).
 
+CRITICAL LENGTH RULE FOR VIDEO FILENAME:
+Keep the entire output (caption + all hashtags combined) concise, punchy, and strictly within 220 characters so that the entire text fits 100% into the video file name without getting cut off. Write 1-2 impactful sentences for the caption, followed by 5-8 top viral hashtags for {platform.upper()}.
+
 EXACT FORMAT TO FOLLOW:
 [Engaging, story-driven caption strictly in fluent English describing the key moment, emotion, humor, or situation with appropriate emojis]
 
-#Hashtag1 #Hashtag2 #Hashtag3 #Hashtag4 #Hashtag5 ... (15-20 viral, trending hashtags for {platform.upper()})
+#Hashtag1 #Hashtag2 #Hashtag3 #Hashtag4 #Hashtag5 #Hashtag6 #Hashtag7 #Hashtag8
 
 EXAMPLE:
-She walks into the house with her suitcase and paperwork… and within seconds the entire family confrontation explodes. 😳📄💔 Accusations fly, everyone gets pulled into the argument, and by the end one person is left standing there as the others walk away. Family drama just got REAL. 👀🔥
-
-#FamilyDrama #FamilyConflict #FamilySecrets #RelationshipDrama #EmotionalStory #FamilyChaos #DramaReels #UnexpectedTruth #StoryTime #EmotionalDrama #ViralReels #MustWatch
+She walks in with her paperwork and family confrontation explodes! 😳📄 Accusations fly and drama got real. 👀🔥 #FamilyDrama #FamilySecrets #RelationshipDrama #StoryTime #ViralReels #MustWatch
 
 CRITICAL RULES:
 - EVERYTHING MUST be written strictly in 100% FLUENT ENGLISH ONLY.
@@ -1805,14 +1809,14 @@ CRITICAL RULES:
                     try:
                         import web_server
                         web_server.state.latest_result = {
-                            "folder": target_folder.name,
+                            "folder": "output_media",
                             "video_file": renamed_filename,
                             "txt_file": "",
                             "content": ai_output
                         }
                     except Exception:
                         pass
-                    self.log(f"   ✂️  CUT & RENAMED ➔ {target_folder.name}/{renamed_filename}")
+                    self.log(f"   ✂️  CUT & RENAMED ➔ output_media/{renamed_filename}")
                     self.done_count += 1
                     self.msg_queue.put(("done_count", self.done_count))
 

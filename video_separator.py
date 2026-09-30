@@ -105,7 +105,7 @@ def split_caption_and_hashtags(text):
     hashtag_str = ' '.join(hashtags)
     return caption_part, hashtag_str
 
-def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=240):
+def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=248):
     ext = ext.lower() if ext else ".mp4"
     if not ext.startswith("."):
         ext = "." + ext
@@ -123,26 +123,36 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
         if len(candidate) <= max_len:
             base_name = candidate
         else:
-            selected_tags = []
-            tag_len = 0
-            for tag in hashtags.split():
-                if tag_len + len(tag) + 1 <= 85:
-                    selected_tags.append(tag)
-                    tag_len += len(tag) + 1
-                else:
-                    break
-            tag_part = ' '.join(selected_tags)
-            avail_for_caption = max_len - len(tag_part) - 1
-            if len(caption) > avail_for_caption:
-                truncated = caption[:avail_for_caption]
+            tags = hashtags.split()
+            tag_part = ' '.join(tags)
+            if len(tag_part) + 80 <= max_len:
+                avail_caption = max_len - len(tag_part) - 1
+                truncated = caption[:avail_caption]
                 last_space = truncated.rfind(' ')
-                if last_space > avail_for_caption // 2:
+                if last_space > avail_caption // 2:
                     caption_part = truncated[:last_space].rstrip('. ')
                 else:
                     caption_part = truncated.rstrip('. ')
+                base_name = f"{caption_part} {tag_part}".strip()
             else:
-                caption_part = caption
-            base_name = f"{caption_part} {tag_part}".strip()
+                selected_tags = []
+                t_len = 0
+                max_tag_budget = max_len - min(len(caption), 100) - 1
+                for t in tags:
+                    if t_len + len(t) + 1 <= max_tag_budget:
+                        selected_tags.append(t)
+                        t_len += len(t) + 1
+                    else:
+                        break
+                tag_part = ' '.join(selected_tags)
+                avail_caption = max_len - len(tag_part) - 1
+                truncated = caption[:avail_caption]
+                last_space = truncated.rfind(' ')
+                if last_space > avail_caption // 2:
+                    caption_part = truncated[:last_space].rstrip('. ')
+                else:
+                    caption_part = truncated.rstrip('. ')
+                base_name = f"{caption_part} {tag_part}".strip()
 
     base_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', base_name).strip().rstrip('. ')
     if len(base_name) > max_len:
@@ -244,15 +254,16 @@ FORMAT REQUIREMENTS:
 Provide ONLY the story-driven caption followed directly by hashtags.
 Do NOT include ANY section titles, labels, or prefixes (Do NOT write '🎯 HOOK:', '📌 CAPTION:', '🏷️ HASHTAGS:', 'Caption:', 'Hook:', etc.).
 
+CRITICAL LENGTH RULE FOR VIDEO FILENAME:
+Keep the entire output (caption + all hashtags combined) concise, punchy, and strictly within 220 characters so that the entire text fits 100% into the video file name without getting cut off. Write 1-2 impactful sentences for the caption, followed by 5-8 top viral hashtags for {platform_name.upper()}.
+
 EXACT FORMAT TO FOLLOW:
 [Engaging, story-driven caption strictly in fluent English describing the key moment, emotion, humor, or situation with appropriate emojis]
 
-#Hashtag1 #Hashtag2 #Hashtag3 #Hashtag4 #Hashtag5 ... (15-20 viral, trending hashtags for {platform_name.upper()})
+#Hashtag1 #Hashtag2 #Hashtag3 #Hashtag4 #Hashtag5 #Hashtag6 #Hashtag7 #Hashtag8
 
 EXAMPLE:
-She walks into the house with her suitcase and paperwork… and within seconds the entire family confrontation explodes. 😳📄💔 Accusations fly, everyone gets pulled into the argument, and by the end one person is left standing there as the others walk away. Family drama just got REAL. 👀🔥
-
-#FamilyDrama #FamilyConflict #FamilySecrets #RelationshipDrama #EmotionalStory #FamilyChaos #DramaReels #UnexpectedTruth #StoryTime #EmotionalDrama #ViralReels #MustWatch
+She walks in with her paperwork and family confrontation explodes! 😳📄 Accusations fly and drama got real. 👀🔥 #FamilyDrama #FamilySecrets #RelationshipDrama #StoryTime #ViralReels #MustWatch
 
 CRITICAL RULES:
 - EVERYTHING MUST be written strictly in 100% FLUENT ENGLISH ONLY.
@@ -333,12 +344,11 @@ def main():
 
     total_count = 0
 
+    target_folder = OUTPUT_DIR
+    target_folder.mkdir(parents=True, exist_ok=True)
+
     # 1. Process any subfolders inside input_media
     for folder_path in subfolders:
-        folder_name = folder_path.name
-        target_folder = OUTPUT_DIR / folder_name
-        target_folder.mkdir(parents=True, exist_ok=True)
-
         media_files = sorted(
             [f for f in folder_path.iterdir() if f.is_file() and f.suffix.lower() in all_media_exts],
             key=lambda x: x.name.lower()
@@ -348,8 +358,7 @@ def main():
             ext = media_path.suffix.lower()
 
             print(f"\n[{idx}] 🎬 {media_path.name}")
-            print(f"   📁 Folder: {folder_name}/ (Folder Name Unchanged)")
-            print(f"   🎥 Video will be renamed with Caption & Hashtags")
+            print(f"   🎥 Video will be renamed with Caption & Hashtags directly in output_media")
 
             ai_output = upload_and_analyze_with_gemini(gemini_key, media_path, platform=platform)
 
@@ -367,7 +376,7 @@ def main():
             # Move and rename safely
             safe_move_file(media_path, renamed_target)
 
-            print(f"   ✂️  CUT ➔ {target_folder.name}/{renamed_name}")
+            print(f"   ✂️  CUT ➔ output_media/{renamed_name}")
             total_count += 1
 
         try:
@@ -379,14 +388,10 @@ def main():
     if direct_files:
         total = len(direct_files)
         for idx, media_path in enumerate(direct_files, 1):
-            folder_name = media_path.stem
-            target_folder = OUTPUT_DIR / folder_name
-            target_folder.mkdir(parents=True, exist_ok=True)
             ext = media_path.suffix.lower()
 
             print(f"\n[{idx}/{total}] 🎬 {media_path.name}")
-            print(f"   📁 Folder: {folder_name}/ (Folder Name Unchanged)")
-            print(f"   🎥 Video will be renamed with Caption & Hashtags")
+            print(f"   🎥 Video will be renamed with Caption & Hashtags directly in output_media")
 
             ai_output = upload_and_analyze_with_gemini(gemini_key, media_path, platform=platform)
 
@@ -404,7 +409,7 @@ def main():
             # Move and rename safely
             safe_move_file(media_path, renamed_target)
 
-            print(f"   ✂️  CUT ➔ {target_folder.name}/{renamed_name}")
+            print(f"   ✂️  CUT ➔ output_media/{renamed_name}")
             total_count += 1
 
     print("\n" + "=" * 68)
