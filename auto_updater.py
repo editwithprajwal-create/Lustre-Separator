@@ -30,11 +30,15 @@ def run_git_silent(args, cwd=WORKSPACE_DIR, timeout=15):
     Executes a git command completely silently.
     Guarantees no black terminal or git.exe window popups on Windows.
     """
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
     kwargs = {
         "cwd": str(cwd),
         "capture_output": True,
         "text": True,
-        "timeout": timeout
+        "timeout": timeout,
+        "stdin": subprocess.DEVNULL,
+        "env": env
     }
     if sys.platform.startswith('win'):
         kwargs["creationflags"] = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)

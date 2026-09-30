@@ -1529,13 +1529,6 @@ def free_port(port):
     except Exception:
         pass
 
-def check_startup_update():
-    try:
-        if hasattr(auto_updater, 'check_for_updates'):
-            auto_updater.check_for_updates()
-    except Exception:
-        pass
-
 def run_server(port=5050, open_browser=True):
     free_port(port)
     ThreadingHTTPServer.allow_reuse_address = True
@@ -1563,9 +1556,6 @@ def run_server(port=5050, open_browser=True):
     print("=" * 64)
     print(f"✨ Lustre Separator Web Server is running at: {url}")
     print("=" * 64)
-
-    # Background auto-update check on launch
-    threading.Thread(target=check_startup_update, daemon=True).start()
 
     if open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()

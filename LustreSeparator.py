@@ -505,8 +505,6 @@ class LustreSeparatorApp:
         self.refresh_file_list()
         self.check_queue()
         self.animate_ticker()
-        if AUTO_UPDATER_AVAILABLE:
-            threading.Thread(target=self.background_update_check, daemon=True).start()
         threading.Thread(target=self.ensure_local_server, daemon=True).start()
 
     def ensure_local_server(self):
