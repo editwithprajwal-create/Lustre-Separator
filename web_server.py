@@ -1068,6 +1068,15 @@ class LustreHTTPHandler(SimpleHTTPRequestHandler):
                 state.add_log(f"❌ Auto-Update Error: {result.get('error')}")
             self.send_json(result)
 
+        elif path == "/api/perform_push":
+            commit_msg = data.get("commit_message", "").strip() or None
+            result = auto_updater.perform_push(commit_msg)
+            if result.get("ok"):
+                state.add_log(f"🚀 GitHub Push: {result.get('message')}")
+            else:
+                state.add_log(f"❌ GitHub Push Error: {result.get('error')}")
+            self.send_json(result)
+
         elif path == "/api/configure_git":
             remote_url = data.get("remote_url", "").strip()
             branch = data.get("branch", "main").strip()

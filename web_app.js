@@ -86,6 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const commitsListBox = document.getElementById('commitsListBox');
     const btnCheckUpdateModal = document.getElementById('btnCheckUpdateModal');
     const btnPerformUpdate = document.getElementById('btnPerformUpdate');
+    const btnPerformPush = document.getElementById('btnPerformPush');
 
     // Drag & Drop / Upload Elements
     const dropOverlay = document.getElementById('dropOverlay');
@@ -896,10 +897,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     btnPerformUpdate.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i> <span>Update Now (Git Pull)</span>';
                 }
 
+                if (btnPerformPush) {
+                    if (data.ahead_count > 0) {
+                        btnPerformPush.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> <span>Push to GitHub (${data.ahead_count})</span>`;
+                    } else if (data.has_uncommitted) {
+                        btnPerformPush.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> <span>Push Changes</span>';
+                    } else {
+                        btnPerformPush.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> <span>Push to GitHub</span>';
+                    }
+                }
+
                 if (updateLogArea) updateLogArea.style.display = 'none';
 
                 if (isManual) {
-                    showToast('✅ Application is up to date!');
+                    showToast(data.message || '✅ Application is up to date!');
                 }
             }
         } catch (err) {
@@ -947,12 +958,49 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function executeGitPush() {
+        const commitMsg = prompt('Enter commit message (optional):', 'Update from Lustre Separator');
+        if (commitMsg === null) return;
+
+        if (btnPerformPush) {
+            btnPerformPush.disabled = true;
+            btnPerformPush.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Pushing to GitHub...</span>';
+        }
+
+        try {
+            const res = await fetch('/api/perform_push', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ commit_message: commitMsg.trim() || undefined })
+            });
+            const data = await res.json();
+
+            if (data.ok) {
+                showToast(`🎉 ${data.message}`);
+                checkAppUpdates(false);
+            } else {
+                showToast(`❌ Push error: ${data.error}`);
+            }
+        } catch (e) {
+            showToast('❌ Push request failed. Check server.');
+        } finally {
+            if (btnPerformPush) {
+                btnPerformPush.disabled = false;
+                btnPerformPush.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> <span>Push to GitHub</span>';
+            }
+        }
+    }
+
     if (btnCheckUpdateModal) {
         btnCheckUpdateModal.addEventListener('click', () => checkAppUpdates(true));
     }
 
     if (btnPerformUpdate) {
         btnPerformUpdate.addEventListener('click', executeGitUpdate);
+    }
+
+    if (btnPerformPush) {
+        btnPerformPush.addEventListener('click', executeGitPush);
     }
 
     if (btnQuickUpdate) {

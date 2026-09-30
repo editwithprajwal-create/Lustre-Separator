@@ -144,7 +144,7 @@ def check_for_updates():
                 "error": f"Failed to fetch from remote: {fetch_res.stderr.strip()}"
             }
 
-        # Check commits behind
+        # Check commits behind (available to pull)
         branch = git_info.get("branch", "main")
         behind_res = subprocess.run(
             ["git", "rev-list", "--count", f"HEAD..origin/{branch}"],
@@ -158,6 +158,25 @@ def check_for_updates():
             except ValueError:
                 behind_count = 0
 
+        # Check commits ahead (ready to push to remote)
+        ahead_res = subprocess.run(
+            ["git", "rev-list", "--count", f"origin/{branch}..HEAD"],
+            cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=5
+        )
+        ahead_count = 0
+        if ahead_res.returncode == 0:
+            try:
+                ahead_count = int(ahead_res.stdout.strip())
+            except ValueError:
+                ahead_count = 0
+
+        # Check uncommitted modifications
+        status_res = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=5
+        )
+        has_uncommitted = bool(status_res.stdout.strip())
+
         # Retrieve commit logs of new updates if available
         commits_log = []
         if behind_count > 0:
@@ -168,17 +187,27 @@ def check_for_updates():
             if log_res.returncode == 0 and log_res.stdout:
                 commits_log = [line.strip() for line in log_res.stdout.strip().split("\n") if line.strip()]
 
+        msg = "Application is up to date."
+        if behind_count > 0:
+            msg = f"{behind_count} new update(s) available to pull!"
+        elif ahead_count > 0:
+            msg = f"{ahead_count} local commit(s) ready to push to GitHub!"
+        elif has_uncommitted:
+            msg = "Local changes detected (ready to push)."
+
         return {
             "ok": True,
             "is_git": True,
             "update_available": behind_count > 0,
             "behind_count": behind_count,
+            "ahead_count": ahead_count,
+            "has_uncommitted": has_uncommitted,
             "current_version": ver.get("version", "2.5.0"),
             "current_commit": git_info.get("commit"),
             "branch": branch,
             "remote_url": remote_url,
             "commits": commits_log,
-            "message": f"{behind_count} new update(s) available!" if behind_count > 0 else "Application is up to date."
+            "message": msg
         }
     except Exception as exc:
         return {
@@ -210,9 +239,9 @@ def perform_update():
             except Exception:
                 pass
 
-        # Perform git pull
+        # Perform git pull with unrelated histories allowed if needed
         pull_res = subprocess.run(
-            ["git", "pull", "origin", branch],
+            ["git", "pull", "--allow-unrelated-histories", "origin", branch],
             cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=30
         )
 
@@ -220,7 +249,7 @@ def perform_update():
             # If there's a merge conflict or unstaged changes, try git stash then pull
             subprocess.run(["git", "stash"], cwd=str(WORKSPACE_DIR), capture_output=True, timeout=10)
             retry_res = subprocess.run(
-                ["git", "pull", "origin", branch],
+                ["git", "pull", "--allow-unrelated-histories", "origin", branch],
                 cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=30
             )
             if retry_res.returncode != 0:
@@ -246,6 +275,51 @@ def perform_update():
         }
     except Exception as exc:
         return {"ok": False, "error": f"Update failed: {str(exc)}"}
+
+def perform_push(commit_msg=None):
+    """
+    Pushes local changes and commits to the remote GitHub repository.
+    Automatically stages and commits uncommitted changes if present.
+    """
+    if not is_git_repo():
+        return {"ok": False, "error": "Cannot push: Directory is not a Git repository."}
+
+    git_info = get_git_info()
+    branch = git_info.get("branch", "main")
+    remote_url = git_info.get("remote_url")
+    if not remote_url:
+        return {"ok": False, "error": "No Git remote URL configured. Please set the remote URL first."}
+
+    try:
+        # Check uncommitted changes
+        status_res = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=10
+        )
+        if status_res.stdout.strip():
+            subprocess.run(["git", "add", "-A"], cwd=str(WORKSPACE_DIR), capture_output=True, timeout=15)
+            msg = commit_msg or f"Update from Lustre Separator ({time.strftime('%Y-%m-%d %H:%M')})"
+            subprocess.run(["git", "commit", "-m", msg], cwd=str(WORKSPACE_DIR), capture_output=True, timeout=15)
+
+        # Execute push
+        push_res = subprocess.run(
+            ["git", "push", "origin", branch],
+            cwd=str(WORKSPACE_DIR), capture_output=True, text=True, timeout=120
+        )
+
+        if push_res.returncode != 0:
+            err = push_res.stderr.strip() or push_res.stdout.strip()
+            return {"ok": False, "error": f"Git push failed: {err}"}
+
+        new_info = get_git_info()
+        return {
+            "ok": True,
+            "message": f"Successfully pushed to GitHub! (Commit: {new_info.get('commit')})",
+            "commit": new_info.get("commit"),
+            "branch": branch
+        }
+    except Exception as exc:
+        return {"ok": False, "error": f"Push failed: {str(exc)}"}
 
 def initialize_git_remote(remote_url, branch="main"):
     """
