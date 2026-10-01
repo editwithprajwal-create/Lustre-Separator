@@ -1298,7 +1298,8 @@ class VideoSeparatorGUI:
                 platform=platform,
                 folder_name=folder_hint,
                 index=i,
-                log_callback=self.log
+                log_callback=self.log,
+                force_local=(engine_mode == "local")
             )
 
             if self.stop_requested:

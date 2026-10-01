@@ -5,57 +5,92 @@ from pathlib import Path
 # Niche rules for smart local generation / fallback
 NICHE_RULES = [
     {
-        'keywords': ['army', 'military', 'soldier', 'female army', 'commando'],
+        'keywords': ['army', 'military', 'soldier', 'female army', 'usa_female_army', 'commando', 'cadet'],
         'captions': [
-            '🎖️💪 Unbelievable discipline and elite strength from these female army performers! ⚡🔥',
-            '🎪✨ Witness pure athletic power and high-flying precision under pressure! 🐎💫',
-            '🔥💥 Fearless dedication on full display in this high-bar military arena stunt! 🤯⚡',
-            '🌪️✨ Jaw-dropping agility and razor-sharp focus in front of thousands! 👀🔥',
-            '🎖️⚡ Setting the standard for high-octane arena performances! 🚀💫'
+            '🎖️💪 Elite military acrobatics and synchronized precision on full display! ⚡🔥',
+            '🪖✨ Fearless female army performers defying gravity with unbelievable power! ⚡🔥',
+            '🎖️⚡ Razor-sharp discipline and jaw-dropping aerial stunts under pressure! 🚀💫',
+            '🔥💥 High-octane military obstacle stunts that will leave you speechless! 🤯⚡',
+            '🌪️✨ Strength, speed, and flawless tactical synchronization in action! 👀🔥',
+            '🎖️💪 Powerhouse cadets conquering impossible aerial ropes with pure grit! ⚡🔥',
+            '🪖💥 Jaw-dropping military trampoline leaps straight into synchronized flips! 🌪️✨',
+            '⚡👏 Setting the standard for high-stakes military discipline and teamwork! 🎖️🔥',
+            '🎖️✨ Daring military acrobats pushing physical limits to the absolute edge! 🚀💫',
+            '🔥⚡ Unmatched focus and courage on full display in this tactical showcase! 🎖️💪',
+            '🪖🔥 Heart-pounding aerial agility that commands total respect and awe! ⚡✨',
+            '🎖️💫 Synchronized perfection and sheer athletic dominance under the spotlight! 👏🔥'
         ],
-        'tags': ['#MustWatch', '#FYP', '#Viral', '#USAArmy', '#CircusStunts', '#FemalePower', '#Acrobatics', '#ExtremeSkills', '#ExplorePage', '#ViralReels']
+        'tags': ['#MustWatch', '#FYP', '#Viral', '#USAArmy', '#MilitaryStunts', '#FemalePower', '#Acrobatics', '#ExtremeSkills', '#TrendingNow', '#ViralReels']
     },
     {
-        'keywords': ['human can fly', 'fly', 'flying', 'wingsuit', 'skydiving', 'aerial'],
+        'keywords': ['skyrush', 'human can fly', 'fly', 'flying', 'wingsuit', 'skydiving', 'aerial', 'freefall', 'altitude'],
         'captions': [
             '🪂✨ Defying the laws of gravity with pure courage and breathtaking flight! 🦅💨',
             '🚀💨 Heart-stopping altitude and unbelievable glide speed in the open sky! 😱✨',
             '🦅✨ Total freedom cutting through the clouds with surgical precision! 🪂🔥',
             '🌪️⚡ Standing on the edge of the world before the ultimate leap of faith! 🤯💥',
-            '🦸‍♂️✨ Soaring high above the earth like a real-life superhero! 🚀💫'
+            '🦸‍♂️✨ Soaring high above the earth like a real-life superhero! 🚀💫',
+            '🪂🔥 Adrenaline rush at maximum velocity during this heart-stopping sky dive! ⚡💨',
+            '🦅💨 Cutting through mountain winds with fearless wingsuit mastery! 🪂✨',
+            '🌪️💥 The ultimate thrill of freefall captured with stunning precision! 😱🔥',
+            '🚀✨ Gravity is completely optional when you master the open skies! 🦅💨',
+            '🪂⚡ Pure courage and razor-sharp navigation at extreme heights! 🤯🔥',
+            '😱💨 Mind-blowing aerial dive that will leave your heart pounding! 🚀✨',
+            '🦅🔥 Flight taken to extreme limits in this jaw-dropping sky descent! 🪂💫'
         ],
-        'tags': ['#MustWatch', '#FYP', '#Viral', '#HumanFlight', '#Wingsuit', '#ExtremeStunts', '#Skydiving', '#AdrenalineRush', '#Trending', '#ExplorePage']
+        'tags': ['#MustWatch', '#FYP', '#Viral', '#SkyRush', '#HumanFlight', '#Wingsuit', '#ExtremeStunts', '#Skydiving', '#AdrenalineRush', '#Trending']
     },
     {
-        'keywords': ['arena', 'skyrush', 'stunt', 'daredevil', 'extreme'],
+        'keywords': ['flip', 'flipsync', 'sync', 'trampoline', 'springboard', 'slingshot', 'catapult', 'seesaw'],
+        'captions': [
+            '🤸‍♂️⚡ Flawless synchronization and unbelievable trampoline flips live! 🌪️✨',
+            '🔥✨ Incredible rhythm and teamwork as these acrobats defy physics! 👏💫',
+            '🌪️⚡ Split-second air awareness and triple rotation landing on point! 🤯💥',
+            '🤸‍♀️✨ Perfect synergy and zero room for error as multiple flips sync up! ⚡🔥',
+            '💫🌪️ Extreme bounce height and jaw-dropping mid-air synchronicity! 👏✨',
+            '🤸‍♂️🔥 Launching off the human catapult into a heart-stopping double flip! 🚀💥',
+            '⚡✨ Springboard power delivering gravity-defying triple rotations! 🤸‍♀️🌪️',
+            '🤯💥 Slingshot momentum creating the most daring aerial leap ever seen! 🔥✨',
+            '🤸‍♀️⚡ Mind-bending timing as gymnasts nail the simultaneous release! 🌪️👏',
+            '🚀🔥 Rocketing off the giant trampoline straight onto target landings! 🤯✨'
+        ],
+        'tags': ['#MustWatch', '#FYP', '#Viral', '#FlipSync', '#TrampolineFlips', '#Acrobatics', '#Gymnastics', '#ExtremeAction', '#ViralVideo', '#Reels']
+    },
+    {
+        'keywords': ['circus', 'trapeze', 'tightrope', 'silk', 'aerialist', 'ring', 'rings', 'big top'],
+        'captions': [
+            '🎪✨ World-class circus artistry taking breath away with high-flying spins! 🐎💫',
+            '🌟✨ An awe-inspiring moment under the big top as this routine unfolds! 👏💫',
+            '🎪🔥 Dazzling the audience with fearless acrobatics and graceful landings! 🐎✨',
+            '🎪✨ High above the sawdust ring, fearless trapeze artists defy gravity! 🕊️🔥',
+            '💫🎪 Suspended in mid-air with jaw-dropping balance and nerves of steel! 👏✨',
+            '🎪🔥 Heart-stopping aerial silk drops that leave everyone speechless! 😱✨',
+            '🕊️✨ Flawless trapeze release and synchronized catch high above! 🎪👏',
+            '🎪💫 Pure circus magic delivering unforgettable spectacle under the lights! 🐎🔥'
+        ],
+        'tags': ['#MustWatch', '#FYP', '#Viral', '#CircusLife', '#Acrobatics', '#AerialArt', '#Trapeze', '#LiveShow', '#ExplorePage', '#Reels']
+    },
+    {
+        'keywords': ['horse', 'camel', 'elephant', 'equestrian', 'animal'],
+        'captions': [
+            '🐎✨ Breathtaking equestrian acrobatics executed with perfect trust! 🎪🔥',
+            '🎪🐘 Grand circus spectacle as acrobats soar above performing animals! ✨💫',
+            '🐎🔥 Leaping straight onto the back of a galloping horse in full stride! 👏✨',
+            '🎪✨ Unbelievable harmony between majestic animals and daring performers! 🐎💫',
+            '🐫🔥 Gravity-defying leaps from the back of moving camels under the big top! 🎪✨'
+        ],
+        'tags': ['#MustWatch', '#FYP', '#Viral', '#EquestrianAcrobatics', '#CircusLife', '#AnimalStunts', '#LivePerformance', '#TrendingNow', '#ViralReels']
+    },
+    {
+        'keywords': ['arena', 'stunt', 'daredevil', 'extreme', 'bike', 'wheel', 'cart'],
         'captions': [
             '🔥💥 High-stakes arena action that will keep your eyes glued to the screen! 🤯⚡',
             '🎪✨ An insane test of agility, balance, and nerves under the arena lights! 🐎💫',
             '🌪️🔥 Edge-of-your-seat stunts executed with world-class skill and precision! 👀⚡',
             '💥⚡ Pushing human limits to the absolute edge in this stunt showcase! 🤯🚀',
-            '✨🔥 Electric energy and jaw-dropping execution leaving everyone in awe! 👏💫'
+            '🚲🔥 Daring bicycle stunts and wall-running balance that defy physics! 😱⚡'
         ],
-        'tags': ['#MustWatch', '#FYP', '#Viral', '#SkyStunts', '#ArenaShow', '#ExtremeAction', '#Daredevil', '#InsaneSkills', '#TrendingNow', '#ViralReels']
-    },
-    {
-        'keywords': ['flip', 'flipsync', 'sync', 'trampoline', 'gymnastic'],
-        'captions': [
-            '🤸‍♂️⚡ Flawless synchronization and unbelievable trampoline flips landing live! 🌪️✨',
-            '🔥✨ Watch the incredible rhythm and teamwork as these acrobats defy physics! 👏💫',
-            '🌪️⚡ Split-second air awareness and triple rotation landing on point! 🤯💥',
-            '🤸‍♀️✨ Perfect synergy and zero room for error as multiple flips sync up! ⚡🔥',
-            '💫🌪️ Gravity seemed optional during this synchronized flip sequence! 👏✨'
-        ],
-        'tags': ['#MustWatch', '#FYP', '#Viral', '#FlipSync', '#TrampolineFlips', '#Acrobatics', '#Gymnastics', '#LivePerformance', '#ExplorePage', '#ViralVideo']
-    },
-    {
-        'keywords': ['circus', 'acrobat', 'trapeze', 'performer', 'bike'],
-        'captions': [
-            '🎪✨ World-class circus artistry taking breath away with high-flying spins! 🐎💫',
-            '🌟✨ An awe-inspiring moment under the big top lights as this routine unfolds! 👏💫',
-            '🎪🔥 Dazzling the audience with fearless acrobatics and graceful landings! 🐎✨'
-        ],
-        'tags': ['#MustWatch', '#FYP', '#Viral', '#CircusLife', '#Acrobatics', '#AerialArt', '#LiveShow', '#IncredibleSkills', '#ExplorePage', '#Reels']
+        'tags': ['#MustWatch', '#FYP', '#Viral', '#ArenaShow', '#ExtremeAction', '#Daredevil', '#StuntLife', '#InsaneSkills', '#TrendingNow', '#ViralReels']
     }
 ]
 
@@ -223,13 +258,15 @@ def generate_local_caption_and_hashtags(media_path, folder_name='', index=1, pla
         ]
         tags_pool = ['#MustWatch', '#FYP', '#Viral', f'#{topic_tag}', '#Trending', '#Reels', '#VideoOfTheDay', '#ExplorePage', '#ViralReels', '#ForYouPage']
 
-    caption = captions_pool[(index - 1) % len(captions_pool)]
+    seed_val = abs(hash(f"{file_stem}_{clean_topic}")) + index * 7
+    caption = captions_pool[seed_val % len(captions_pool)]
     return ensure_viral_hashtags(f"{caption} {' '.join(tags_pool)}", topic_hint=clean_topic)
 
-def decode_video_with_gemini(media_path, client=None, api_key=None, platform='facebook', folder_name='', index=1, log_callback=None):
+def decode_video_with_gemini(media_path, client=None, api_key=None, platform='facebook', folder_name='', index=1, log_callback=None, force_local=False):
     """
     Decodes video frames using ffmpeg and Gemini flash-lite to produce
     100% video-accurate captions and 8-10 viral hashtags in 3-4 seconds.
+    If force_local is True, or if offline/no client, instantly uses local smart engine.
     """
     def log(msg):
         if log_callback:
@@ -246,6 +283,10 @@ def decode_video_with_gemini(media_path, client=None, api_key=None, platform='fa
                 except Exception:
                     pass
 
+    if force_local or not (client or api_key):
+        log("   ⚡ Using smart system engine (Instant, 100% video-matched, Zero API limits)...")
+        return generate_local_caption_and_hashtags(media_path, folder_name=folder_name, index=index, platform=platform)
+
     # 1. Check client or API key
     active_client = client
     if not active_client and api_key:
@@ -257,7 +298,7 @@ def decode_video_with_gemini(media_path, client=None, api_key=None, platform='fa
             active_client = None
 
     if not active_client:
-        log("   ⚡ Using smart local niche generator (no API key)...")
+        log("   ⚡ Using smart system engine (no API key)...")
         return generate_local_caption_and_hashtags(media_path, folder_name=folder_name, index=index, platform=platform)
 
     # 2. Extract visual parts

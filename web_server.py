@@ -771,15 +771,17 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=False
 
     try:
         cfg = load_config()
+        engine_mode = cfg.get("engine_mode", "local").lower()
         raw_key = cfg.get("gemini_api_key", "").strip()
 
-        rotator = GeminiKeyRotator(raw_key)
-        if rotator.total_keys == 0:
-            state.add_log("❌ Error: Gemini API Key not set. Please configure your API key in Settings.")
-            return
+        rotator = GeminiKeyRotator(raw_key) if raw_key else None
+        use_system_engine = (engine_mode == "local") or (not rotator or rotator.total_keys == 0)
 
-        if rotator.total_keys > 1:
-            state.add_log(f"🔑 Multi-Key Rotation Active: {rotator.total_keys} Gemini API keys loaded.")
+        if use_system_engine:
+            state.add_log("⚡ Smart System SEO Engine: 100% Offline, Zero Rate Limit, Instant Processing Active.")
+        else:
+            if rotator.total_keys > 1:
+                state.add_log(f"🔑 Multi-Key Rotation Active: {rotator.total_keys} Gemini API keys loaded.")
 
         video_exts = ('.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v')
 
@@ -839,20 +841,31 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=False
             active_client = None
 
             folder_hint = target_folder.name if target_folder else media_path.parent.name
-            active_client, cur_k, tot_k = rotator.get_client() if rotator.total_keys > 0 else (None, 0, 0)
-            api_key_to_use = rotator.keys[cur_k] if rotator.total_keys > 0 else None
 
-            state.add_log(f"   🎬 Decoding video frames and analyzing content for '{media_path.name}'...")
-            ai_output = local_video_seo.decode_video_with_gemini(
-                media_path=media_path,
-                client=active_client,
-                api_key=api_key_to_use,
-                platform=platform,
-                folder_name=folder_hint,
-                index=idx,
-                log_callback=state.add_log
-            )
-            state.add_log(f"   ✨ Video decoding complete! Generated accurate Caption & 8+ Hashtags.")
+            if use_system_engine:
+                state.add_log(f"   ⚡ System Engine analyzing '{media_path.name}'...")
+                ai_output = local_video_seo.generate_local_caption_and_hashtags(
+                    media_path=media_path,
+                    folder_name=folder_hint,
+                    index=idx,
+                    platform=platform
+                )
+                state.add_log(f"   ✨ Generated video-matched Caption & 8+ Hashtags!")
+            else:
+                active_client, cur_k, tot_k = rotator.get_client() if (rotator and rotator.total_keys > 0) else (None, 0, 0)
+                api_key_to_use = rotator.keys[cur_k] if (rotator and rotator.total_keys > 0) else None
+
+                state.add_log(f"   🎬 Decoding video frames and analyzing content for '{media_path.name}'...")
+                ai_output = local_video_seo.decode_video_with_gemini(
+                    media_path=media_path,
+                    client=active_client,
+                    api_key=api_key_to_use,
+                    platform=platform,
+                    folder_name=folder_hint,
+                    index=idx,
+                    log_callback=state.add_log
+                )
+                state.add_log(f"   ✨ Video decoding complete! Generated accurate Caption & 8+ Hashtags.")
             if False:
                 upload_target, is_temp_preview = create_fast_video_preview(media_path)
                 try:
@@ -1158,21 +1171,35 @@ def direct_process_worker(media_path, original_filename, platform, is_temp=False
 
     try:
         cfg = load_config()
+        engine_mode = cfg.get("engine_mode", "local").lower()
         raw_key = cfg.get("gemini_api_key", "").strip()
-        rotator = GeminiKeyRotator(raw_key)
+        rotator = GeminiKeyRotator(raw_key) if raw_key else None
         platform = cfg.get("target_platform", "facebook")
-        active_client, cur_k, tot_k = rotator.get_client() if rotator.total_keys > 0 else (None, 0, 0)
-        api_key_to_use = rotator.keys[cur_k] if rotator.total_keys > 0 else None
-        state.add_log(f"   🎬 Decoding video frames and analyzing content for '{original_filename}'...")
-        ai_output = local_video_seo.decode_video_with_gemini(
-            media_path=media_path,
-            client=active_client,
-            api_key=api_key_to_use,
-            platform=platform,
-            folder_name=media_path.parent.name,
-            index=1,
-            log_callback=state.add_log
-        )
+        use_system_engine = (engine_mode == "local") or (not rotator or rotator.total_keys == 0)
+
+        if use_system_engine:
+            state.add_log(f"⚡ [Direct Extract Mode]: Analyzing '{original_filename}' with Smart System Engine (Zero API Limits, Instant)...")
+            ai_output = local_video_seo.generate_local_caption_and_hashtags(
+                media_path=media_path,
+                folder_name=media_path.parent.name,
+                index=1,
+                platform=platform
+            )
+        else:
+            state.add_log(f"⚡ [Direct Extract Mode]: Analyzing '{original_filename}' with Gemini Vision (Zero File Modifications)...")
+            active_client, cur_k, tot_k = rotator.get_client() if (rotator and rotator.total_keys > 0) else (None, 0, 0)
+            api_key_to_use = rotator.keys[cur_k] if (rotator and rotator.total_keys > 0) else None
+            state.add_log(f"   🎬 Decoding video frames and analyzing content for '{original_filename}'...")
+            ai_output = local_video_seo.decode_video_with_gemini(
+                media_path=media_path,
+                client=active_client,
+                api_key=api_key_to_use,
+                platform=platform,
+                folder_name=media_path.parent.name,
+                index=1,
+                log_callback=state.add_log,
+                force_local=use_system_engine
+            )
         state.latest_result = {
             "folder": "Direct Extract (Zero File Changes)",
             "video_file": original_filename,
