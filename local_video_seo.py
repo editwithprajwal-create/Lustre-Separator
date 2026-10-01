@@ -197,44 +197,36 @@ def ensure_viral_hashtags(text, topic_hint='ViralVideo'):
             caption = f"🔥✨ {caption} 🤯💥"
 
     # Clean topic hint
-    topic_tag = re.sub(r'[^a-zA-Z0-9]', '', topic_hint.title()) if topic_hint else 'ViralVideo'
-
+    topic_tag = re.sub(r'[^a-zA-Z0-9]', '', topic_hint.title()) if topic_hint else 'ViralMoment'
     if topic_tag.lower() in GENERIC_FOLDERS or not topic_tag:
         topic_tag = 'ViralMoment'
 
-    required_priority = ['#MustWatch', '#FYP', '#Viral', f'#{topic_tag}']
-    extra_tags = [
-        '#Trending', '#Reels', '#ExplorePage', '#VideoOfTheDay',
-        '#ViralReels', '#ForYouPage', '#TrendingNow', '#EpicMoments', '#Acrobatics'
-    ]
+    required_priority = ['#MustWatch', '#FYP', '#Reels']
+    video_tags = []
+    seen = {t.lower() for t in required_priority}
 
-    final_tags = []
-    seen = set()
-
-    # Add required priority tags first
-    for tag in required_priority:
-        norm = tag.lower()
-        if norm not in seen:
-            final_tags.append(tag)
-            seen.add(norm)
-
-    # Add AI-detected tags
+    # Extract up to 2 video-specific tags from AI tags
     for tag in found_tags:
-        norm = tag.lower()
-        if norm not in seen and norm not in {'#outputmedia', '#posted', '#output', '#input', '#media'}:
-            final_tags.append(tag)
+        clean_t = '#' + re.sub(r'[^A-Za-z0-9_]', '', tag)
+        norm = clean_t.lower()
+        if norm not in seen and norm not in {'#outputmedia', '#posted', '#output', '#input', '#media', '#viral'}:
             seen.add(norm)
+            video_tags.append(clean_t)
+            if len(video_tags) == 2:
+                break
 
-    # Fill until we have at least 8-10 hashtags
-    for tag in extra_tags:
-        if len(final_tags) >= 9:
-            break
-        norm = tag.lower()
-        if norm not in seen:
-            final_tags.append(tag)
-            seen.add(norm)
+    # If fewer than 2 video tags, infer from topic hint
+    if len(video_tags) < 2:
+        for fallback in [f"#{topic_tag}", '#Acrobatics', '#TrendingNow', '#ViralReels']:
+            norm = fallback.lower()
+            if norm not in seen:
+                seen.add(norm)
+                video_tags.append(fallback)
+                if len(video_tags) == 2:
+                    break
 
-    return f"{caption}   {' '.join(final_tags)}"
+    final_5_tags = required_priority + video_tags[:2]
+    return f"{caption}   {' '.join(final_5_tags)}"
 
 def generate_local_caption_and_hashtags(media_path, folder_name='', index=1, platform='facebook'):
     """Fast local fallback when offline or no API key available."""
@@ -350,14 +342,16 @@ Carefully examine the exact visual subjects, stunts, actions, choreography, equi
 Generate a viral, engaging social media post strictly in 100% FLUENT ENGLISH.
 
 RULES:
-1. Write a short, punchy 1-sentence viral caption WITH engaging emojis (e.g. 🔥✨, 🎪⚡, 🎖️💪, 🤯💥) strictly between 50 and 68 characters (about 8 to 12 words) describing the action. Must end cleanly with punctuation (! or .) and emojis.
-2. Follow immediately with at least 6 to 8 viral hashtags starting with #MustWatch #FYP #Viral, followed by 3-5 specific video tags.
+1. Write a captivating, rich, and descriptive viral caption WITH engaging emojis (e.g. 🔥✨, 🎪⚡, 🎖️💪, 🤯💥) strictly between 75 and 92 characters (about 12 to 16 words). Describe the action vividly and end cleanly with punctuation (! or .) and emojis.
+2. Follow immediately with EXACTLY 5 hashtags:
+   - Must start with: #MustWatch #FYP #Reels
+   - Followed by exactly 2 highly specific hashtags matching the exact video action.
 3. Do NOT include ANY section titles, labels, or prefixes (Do NOT write '🎯 HOOK:', '📌 CAPTION:', '🏷️ HASHTAGS:', 'Caption:', 'Hook:', etc.).
 
 FORMAT:
-🔥✨ [Short 8-12 word action caption with emojis] 🤯💥
+🔥✨ [Rich, descriptive 12-16 word action story caption with emojis] 🤯💥
 
-#MustWatch #FYP #Viral #Tag1 #Tag2 #Tag3 #Tag4 #Tag5 #Tag6
+#MustWatch #FYP #Reels #VideoTag1 #VideoTag2
 """
 
     log(f"   🧠 Gemini AI is analyzing video frames...")

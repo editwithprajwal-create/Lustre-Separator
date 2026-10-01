@@ -103,34 +103,41 @@ def save_config(cfg):
     except Exception as e:
         print(f"Config save notice: {e}")
 
-def ensure_viral_hashtags(ai_text):
-    """Guarantees essential mega-viral hashtags like #MustWatch, #FYP, and #Viral are never missed and minimum 7-8 hashtags exist."""
+def ensure_viral_hashtags(ai_text, topic_hint=''):
+    """Guarantees exactly 5 hashtags: 3 viral (#MustWatch, #FYP, #Reels) + 2 video-related tags."""
     if not ai_text:
         return ai_text
-    lower_text = ai_text.lower()
-    tags_to_append = []
-    if "#mustwatch" not in lower_text:
-        tags_to_append.append("#MustWatch")
-    if "#fyp" not in lower_text:
-        tags_to_append.append("#FYP")
-    if "#viral" not in lower_text and "#viralreels" not in lower_text:
-        tags_to_append.append("#Viral")
 
-    # Count existing hashtags
-    existing_tags = re.findall(r'#\w+', ai_text)
-    extra_boosters = ["#Trending", "#Reels", "#ExplorePage", "#VideoOfTheDay", "#ViralReels", "#ForYouPage"]
-    for eb in extra_boosters:
-        if (len(existing_tags) + len(tags_to_append)) >= 8:
-            break
-        if eb.lower() not in lower_text and eb not in tags_to_append:
-            tags_to_append.append(eb)
+    existing_tags = re.findall(r'#[A-Za-z0-9_]+', ai_text)
+    caption_part = re.sub(r'#[A-Za-z0-9_]+', '', ai_text).strip()
 
-    if tags_to_append:
-        if '#' in ai_text:
-            return f"{ai_text.strip()} {' '.join(tags_to_append)}"
-        else:
-            return f"{ai_text.strip()}   {' '.join(tags_to_append)}"
-    return ai_text
+    required_priority = ["#MustWatch", "#FYP", "#Reels"]
+    seen = {t.lower() for t in required_priority}
+    video_tags = []
+
+    for t in existing_tags:
+        clean_t = '#' + re.sub(r'[^A-Za-z0-9_]', '', t)
+        norm = clean_t.lower()
+        if norm not in seen and norm not in {'#outputmedia', '#output', '#input', '#media', '#viral'}:
+            seen.add(norm)
+            video_tags.append(clean_t)
+            if len(video_tags) == 2:
+                break
+
+    if len(video_tags) < 2:
+        th_clean = re.sub(r'[^a-zA-Z0-9]', '', topic_hint.title()) if topic_hint else 'Action'
+        candidates = [f"#{th_clean}", '#Acrobatics', '#TrendingNow', '#ViralReels']
+        for cand in candidates:
+            norm = cand.lower()
+            if norm not in seen and len(cand) > 2:
+                seen.add(norm)
+                video_tags.append(cand)
+                if len(video_tags) == 2:
+                    break
+
+    final_5_tags = required_priority + video_tags[:2]
+    tags_str = ' '.join(final_5_tags)
+    return f"{caption_part}   {tags_str}" if caption_part else tags_str
 
 def clean_ai_output(raw_text):
     """Cleans any accidental section headers/labels (HOOK:, CAPTION:, HASHTAGS:) so user gets pure caption & hashtags."""
@@ -230,45 +237,48 @@ def is_finished_sentence(s):
         return ord(last_c) > 0x1F000 or ord(last_c) in range(0x2600, 0x27BF) or ord(last_c) == 0xFE0F
     return False
 
-def clean_caption_text(text, max_len=70, topic_hint=''):
+def clean_caption_text(text, max_len=98, topic_hint=''):
     """
     Cleans caption text ensuring it NEVER ends with dangling stop-words or broken 'adi' words.
     Guarantees emojis in caption and total length strictly <= max_len.
+    Makes the caption as long and rich as possible within max_len.
     """
     # Remove AI labels
     text = re.sub(r'^(🎯\s*HOOK:|📌\s*CAPTION:|🏷️\s*HASHTAGS:|Caption:|Hook:|Title:)\s*', '', text, flags=re.I).strip()
     text = re.sub(r'[<>:"/\\|?*\x00-\x1f\r\n]', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
     if not text:
-        text = "Incredible moment caught on camera that you have to see"
+        text = "Incredible moment caught on camera that you have to see to believe"
 
     lead_emo, tail_emo = get_topic_emojis(topic_hint)
     already_has_emoji = has_emojis(text)
 
-    # If already has emojis, use direct max_len, else reserve space for emojis
     reserved_emo_len = 0 if already_has_emoji else (len(lead_emo) + len(tail_emo))
-    avail_len = max(30, max_len - reserved_emo_len)
+    avail_len = max(35, max_len - reserved_emo_len)
 
-    # Check sentences
+    # Check sentences: greedily take as many full sentences as can fit in avail_len
     sentences = [m.group(0).strip() for m in re.finditer(r'.+?(?:[.!?][\U0001F000-\U0001FAFF\u2600-\u27BF\ufe0f\u200d\s]*|$)', text) if m.group(0).strip()]
     chosen = ""
     if sentences and is_finished_sentence(sentences[0]):
-        if len(sentences[0]) <= avail_len:
-            chosen = sentences[0]
-            if len(sentences) > 1 and is_finished_sentence(sentences[1]) and len(f"{chosen} {sentences[1]}") <= avail_len:
-                chosen = f"{chosen} {sentences[1]}"
+        cand = sentences[0]
+        if len(cand) <= avail_len:
+            chosen = cand
+            for nxt in sentences[1:]:
+                if is_finished_sentence(nxt) and len(f"{chosen} {nxt}") <= avail_len:
+                    chosen = f"{chosen} {nxt}"
+                else:
+                    break
 
     if not chosen:
-        # Find clause break or word boundary within avail_len
         trimmed = text[:avail_len]
         clause_breaks = [trimmed.rfind(', '), trimmed.rfind('; '), trimmed.rfind(' - '), trimmed.rfind(' — ')]
         best_break = max(clause_breaks)
 
-        if best_break > 25:
+        if best_break > 35:
             sub = trimmed[:best_break].strip()
         else:
             last_sp = trimmed.rfind(' ')
-            sub = trimmed[:last_sp].strip() if last_sp > 20 else trimmed.strip()
+            sub = trimmed[:last_sp].strip() if last_sp > 25 else trimmed.strip()
 
         words = sub.split()
         while words and words[-1].lower().rstrip('.,;!?#') in DANGLING_STOPWORDS:
@@ -280,7 +290,7 @@ def clean_caption_text(text, max_len=70, topic_hint=''):
                 cleaned += '!'
             chosen = cleaned
         else:
-            chosen = "Incredible action captured live!"
+            chosen = "Incredible action captured live on camera!"
 
     # Ensure emojis are included
     if not has_emojis(chosen):
@@ -307,86 +317,65 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
 
     # Strictly enforce 155 character total filename limit
     MAX_FILE_NAME_TOTAL = 155
-    max_stem_len = MAX_FILE_NAME_TOTAL - len(ext) # 151 chars
+    max_stem_len = MAX_FILE_NAME_TOTAL - len(ext) # 151 chars for .mp4
 
-    # Infer topic hint if missing
     if not topic_hint:
         cand_str = str(target_folder or fallback_stem).lower()
         topic_hint = cand_str
 
-    # Extract raw tags and caption
     raw_tags = re.findall(r'#[A-Za-z0-9_]+', ai_text)
     caption_raw = re.sub(r'#[A-Za-z0-9_]+', '', ai_text)
 
-    # Balance caption and hashtags:
-    # Guarantee 5-7 complete hashtags (~65-75 chars) + 3 separator spaces
-    # So caption budget is strictly around 65-70 chars
-    caption_budget = 68
-    clean_caption = clean_caption_text(caption_raw, max_len=caption_budget, topic_hint=topic_hint)
+    # User Rule: Exactly 5 hashtags
+    # - 3 viral hashtags: #MustWatch #FYP #Reels
+    # - 2 video-related hashtags
+    priority_tags = ['#MustWatch', '#FYP', '#Reels']
+    video_related_tags = []
+    seen = {t.lower() for t in priority_tags}
 
-    # Clean and prioritize hashtags
-    priority_tags = ['#MustWatch', '#FYP', '#Viral']
-    seen = set()
-    valid_tags = []
-
-    # Add priority tags first
-    for t in priority_tags:
-        norm = t.lower()
-        if norm not in seen:
-            seen.add(norm)
-            valid_tags.append(t)
-
-    # Add AI-detected tags
     for t in raw_tags:
         clean_t = '#' + re.sub(r'[^A-Za-z0-9_]', '', t)
         norm = clean_t.lower()
-        if len(clean_t) > 1 and norm not in seen and norm not in {'#outputmedia', '#output', '#input', '#media'}:
+        if len(clean_t) > 2 and norm not in seen and norm not in {'#outputmedia', '#output', '#input', '#media', '#viral'}:
             seen.add(norm)
-            valid_tags.append(clean_t)
-
-    # Add niche fallback tags if needed
-    niche_fallbacks = ['#Trending', '#Reels', '#ExplorePage', '#VideoOfTheDay', '#ViralReels', '#TrendingNow']
-    for t in niche_fallbacks:
-        norm = t.lower()
-        if norm not in seen:
-            seen.add(norm)
-            valid_tags.append(t)
-
-    # Fit complete hashtags into remaining space
-    space_left = max_stem_len - len(clean_caption) - 3 # '   ' separator
-    fitted_tags = []
-    for t in valid_tags:
-        cand = ' '.join(fitted_tags + [t])
-        if len(cand) <= space_left:
-            fitted_tags.append(t)
-        else:
-            break
-
-    if fitted_tags:
-        base_name = f"{clean_caption}   {' '.join(fitted_tags)}"
-    else:
-        # If space was tight, re-trim caption to 52 chars
-        clean_caption = clean_caption_text(caption_raw, max_len=52, topic_hint=topic_hint)
-        space_left = max_stem_len - len(clean_caption) - 3
-        fitted_tags = []
-        for t in valid_tags:
-            cand = ' '.join(fitted_tags + [t])
-            if len(cand) <= space_left:
-                fitted_tags.append(t)
-            else:
+            video_related_tags.append(clean_t)
+            if len(video_related_tags) == 2:
                 break
-        base_name = f"{clean_caption}   {' '.join(fitted_tags)}" if fitted_tags else clean_caption
 
-    # Strict hard ceiling: <= 155 chars
-    while len(f"{base_name}{ext}") > MAX_FILE_NAME_TOTAL and '   ' in base_name:
-        parts = base_name.split('   ')
-        c_part, t_part = parts[0], parts[1]
-        t_list = t_part.split()
-        if t_list:
-            t_list.pop()
-            base_name = f"{c_part}   {' '.join(t_list)}" if t_list else c_part
-        else:
-            break
+    # If fewer than 2 video-related tags found, infer from topic hint
+    if len(video_related_tags) < 2:
+        th_clean = re.sub(r'[^a-zA-Z0-9]', '', topic_hint.title()) if topic_hint else 'Action'
+        candidates = [f"#{th_clean}", '#Acrobatics', '#ExtremeSkills', '#TrendingNow', '#ViralReels']
+        for cand in candidates:
+            norm = cand.lower()
+            if norm not in seen and len(cand) > 2:
+                seen.add(norm)
+                video_related_tags.append(cand)
+                if len(video_related_tags) == 2:
+                    break
+
+    # Exactly 5 hashtags: 3 viral + 2 video-related
+    chosen_tags = priority_tags + video_related_tags[:2]
+    tags_str = ' '.join(chosen_tags)
+
+    # User Rule: Make caption as big/long as possible within the 155 character limit!
+    # Available space for caption = max_stem_len - len(tags_str) - 3 (spaces)
+    space_left_for_caption = max_stem_len - len(tags_str) - 3
+    clean_caption = clean_caption_text(caption_raw, max_len=space_left_for_caption, topic_hint=topic_hint)
+
+    base_name = f"{clean_caption}   {tags_str}"
+
+    # Hard ceiling guarantee: strictly <= 155 chars
+    while len(f"{base_name}{ext}") > MAX_FILE_NAME_TOTAL:
+        space_needed = len(f"{base_name}{ext}") - MAX_FILE_NAME_TOTAL
+        new_caption_len = len(clean_caption) - space_needed
+        clean_caption = clean_caption_text(clean_caption, max_len=new_caption_len, topic_hint=topic_hint)
+        base_name = f"{clean_caption}   {tags_str}"
+        if len(f"{base_name}{ext}") > MAX_FILE_NAME_TOTAL:
+            if len(chosen_tags) > 4:
+                chosen_tags.pop()
+                tags_str = ' '.join(chosen_tags)
+                base_name = f"{clean_caption}   {tags_str}"
 
     candidate_name = f"{base_name}{ext}"
     if target_folder is None:
@@ -400,16 +389,10 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
     while True:
         tag = f" ({counter})"
         needed = len(tag)
-        curr_tags = list(fitted_tags)
-        while curr_tags and (len(f"{clean_caption}   {' '.join(curr_tags)}") + needed + len(ext) > MAX_FILE_NAME_TOTAL):
-            curr_tags.pop()
-
-        if curr_tags:
-            stem_cand = f"{clean_caption}   {' '.join(curr_tags)}"
-        else:
-            stem_cand = clean_caption_text(clean_caption, max_len=MAX_FILE_NAME_TOTAL - len(ext) - needed, topic_hint=topic_hint)
-
-        new_name = f"{stem_cand}{tag}{ext}"
+        max_stem_for_dup = MAX_FILE_NAME_TOTAL - len(ext) - needed
+        space_for_dup_caption = max_stem_for_dup - len(tags_str) - 3
+        dup_caption = clean_caption_text(clean_caption, max_len=space_for_dup_caption, topic_hint=topic_hint)
+        new_name = f"{dup_caption}   {tags_str}{tag}{ext}"
         if not (tf / new_name).exists():
             return new_name
         counter += 1
