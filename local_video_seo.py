@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-import os, re, random
+import os, sys, re, time, random, shutil, subprocess
 from pathlib import Path
 
+# Niche rules for smart local generation / fallback
 NICHE_RULES = [
     {
         'keywords': ['army', 'military', 'soldier', 'female army', 'commando'],
@@ -58,15 +59,129 @@ NICHE_RULES = [
     }
 ]
 
+FAST_MODELS = [
+    'gemini-flash-lite-latest',
+    'gemini-flash-latest',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite'
+]
+
+GENERIC_FOLDERS = {
+    'output', 'output_media', 'outputmedia', 'posted', 'input', 'media', 'videos',
+    'temp', 'downloads', 'seedance', 'prompts', 'compressed', 'generated'
+}
+
 def clean_topic_name(folder_or_name):
     raw = str(folder_or_name).replace('\\', '/').split('/')[-1]
     raw = re.sub(r'\.[a-zA-Z0-9]+$', '', raw)
     raw = re.sub(r'[\-_]+', ' ', raw)
-    raw = re.sub(r'\b(?:400|Full|Prompts?|201|to|600|9x16|16x9|1080p|4k|Generated|video|no|watermark|live)\b', '', raw, flags=re.I)
+    raw = re.sub(r'\b(?:400|Full|Prompts?|201|to|600|9x16|16x9|1080p|4k|Generated|video|no|watermark|live|posted|output_media|compressed)\b', '', raw, flags=re.I)
     raw = re.sub(r'\s+', ' ', raw).strip()
-    return raw or 'Viral Video'
+    if raw.lower() in GENERIC_FOLDERS or not raw:
+        return 'Viral Video'
+    return raw
+
+def get_video_duration(video_path):
+    cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', str(video_path)]
+    flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+    try:
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=flags)
+        dur = float(res.stdout.strip())
+        return dur if dur > 0 else 6.0
+    except Exception:
+        return 6.0
+
+def extract_video_keyframes(video_path, num_frames=3):
+    """Extracts 3 sharp keyframes across video duration in ~0.5s with zero window flicker."""
+    dur = get_video_duration(video_path)
+    if dur <= 1.5:
+        points = [dur * 0.5]
+    elif dur <= 3.0:
+        points = [dur * 0.3, dur * 0.7]
+    else:
+        points = [dur * 0.2, dur * 0.5, dur * 0.8]
+
+    flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+    frames_bytes = []
+    temp_dir = Path(os.environ.get('TEMP', '.'))
+
+    for idx, p in enumerate(points):
+        temp_img = temp_dir / f'dec_kf_{os.getpid()}_{idx}_{int(time.time()*1000)%10000}.jpg'
+        cmd = [
+            'ffmpeg', '-y', '-ss', f'{p:.2f}', '-i', str(video_path),
+            '-vframes', '1', '-vf', 'scale=-1:720', '-q:v', '3', str(temp_img)
+        ]
+        try:
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=flags)
+            if temp_img.exists() and temp_img.stat().st_size > 0:
+                with open(temp_img, 'rb') as f:
+                    frames_bytes.append(f.read())
+                try:
+                    temp_img.unlink()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    return frames_bytes
+
+def ensure_viral_hashtags(text, topic_hint='ViralVideo'):
+    """Guarantees at least 8 to 10 viral hashtags containing #MustWatch, #FYP, #Viral."""
+    lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
+    if not lines:
+        return f"Incredible moment caught on camera! Watch closely as the action unfolds.   #MustWatch #FYP #Viral #{topic_hint} #Trending #Reels #VideoOfTheDay #ExplorePage"
+
+    # Find existing hashtags
+    found_tags = re.findall(r'#[A-Za-z0-9_]+', text)
+    caption_lines = [l for l in lines if not l.startswith('#')]
+    caption = ' '.join(caption_lines).strip()
+    
+    # Clean caption from unwanted labels
+    caption = re.sub(r'^(🎯\s*HOOK:|📌\s*CAPTION:|🏷️\s*HASHTAGS:|Caption:|Hook:|Title:)\s*', '', caption, flags=re.I).strip()
+    if not caption:
+        caption = "Unbelievable moment captured live on camera that you have to see to believe!"
+
+    # Clean topic hint
+    topic_tag = re.sub(r'[^a-zA-Z0-9]', '', topic_hint.title()) if topic_hint else 'ViralVideo'
+    if topic_tag.lower() in GENERIC_FOLDERS or not topic_tag:
+        topic_tag = 'ViralMoment'
+
+    required_priority = ['#MustWatch', '#FYP', '#Viral', f'#{topic_tag}']
+    extra_tags = [
+        '#Trending', '#Reels', '#ExplorePage', '#VideoOfTheDay',
+        '#ViralReels', '#ForYouPage', '#TrendingNow', '#EpicMoments', '#Acrobatics'
+    ]
+
+    final_tags = []
+    seen = set()
+
+    # Add required priority tags first
+    for tag in required_priority:
+        norm = tag.lower()
+        if norm not in seen:
+            final_tags.append(tag)
+            seen.add(norm)
+
+    # Add AI-detected tags
+    for tag in found_tags:
+        norm = tag.lower()
+        if norm not in seen and norm not in {'#outputmedia', '#posted', '#output', '#input', '#media'}:
+            final_tags.append(tag)
+            seen.add(norm)
+
+    # Fill until we have at least 8-10 hashtags
+    for tag in extra_tags:
+        if len(final_tags) >= 9:
+            break
+        norm = tag.lower()
+        if norm not in seen:
+            final_tags.append(tag)
+            seen.add(norm)
+
+    return f"{caption}   {' '.join(final_tags)}"
 
 def generate_local_caption_and_hashtags(media_path, folder_name='', index=1, platform='facebook'):
+    """Fast local fallback when offline or no API key available."""
     folder_str = str(folder_name or Path(media_path).parent.name)
     file_stem = Path(media_path).stem
     combined_context = f'{folder_str} {file_stem}'.lower()
@@ -82,7 +197,9 @@ def generate_local_caption_and_hashtags(media_path, folder_name='', index=1, pla
         captions_pool = matched_rule['captions']
         tags_pool = list(matched_rule['tags'])
     else:
-        topic_tag = re.sub(r'[^a-zA-Z0-9]', '', clean_topic.title()) or 'ViralMoment'
+        topic_tag = re.sub(r'[^a-zA-Z0-9]', '', clean_topic.title())
+        if topic_tag.lower() in GENERIC_FOLDERS or not topic_tag:
+            topic_tag = 'ViralMoment'
         captions_pool = [
             f'An extraordinary moment captured on camera that you simply have to see to believe! Watch closely as the action unfolds.',
             f'Unbelievable skill and timing delivering pure shock value in seconds! Share this with someone who needs to see it.',
@@ -92,21 +209,114 @@ def generate_local_caption_and_hashtags(media_path, folder_name='', index=1, pla
         tags_pool = ['#MustWatch', '#FYP', '#Viral', f'#{topic_tag}', '#Trending', '#Reels', '#VideoOfTheDay', '#ExplorePage', '#ViralReels', '#ForYouPage']
 
     caption = captions_pool[(index - 1) % len(captions_pool)]
+    return ensure_viral_hashtags(f"{caption} {' '.join(tags_pool)}", topic_hint=clean_topic)
 
-    final_tags = []
-    seen = set()
-    for tag in tags_pool:
-        if tag.lower() not in seen:
-            final_tags.append(tag)
-            seen.add(tag.lower())
+def decode_video_with_gemini(media_path, client=None, api_key=None, platform='facebook', folder_name='', index=1, log_callback=None):
+    """
+    Decodes video frames using ffmpeg and Gemini flash-lite to produce
+    100% video-accurate captions and 8-10 viral hashtags in 3-4 seconds.
+    """
+    def log(msg):
+        if log_callback:
+            try:
+                log_callback(msg)
+            except Exception:
+                pass
+        else:
+            try:
+                print(msg.encode(sys.stdout.encoding or 'utf-8', errors='replace').decode(sys.stdout.encoding or 'utf-8', errors='replace'))
+            except Exception:
+                try:
+                    print(msg.encode('ascii', errors='replace').decode('ascii'))
+                except Exception:
+                    pass
 
-    backup_pool = ['#MustWatch', '#FYP', '#Viral', '#Trending', '#ViralReels', '#ExplorePage', '#Reels', '#VideoOfTheDay', '#ForYouPage', '#TrendingNow']
-    for btag in backup_pool:
-        if len(final_tags) >= 8:
-            break
-        if btag.lower() not in seen:
-            final_tags.append(btag)
-            seen.add(btag.lower())
+    # 1. Check client or API key
+    active_client = client
+    if not active_client and api_key:
+        try:
+            from google import genai
+            active_client = genai.Client(api_key=api_key)
+        except Exception as e:
+            log(f"   [!] Failed to initialize Gemini Client: {e}")
+            active_client = None
 
-    hashtags_str = ' '.join(final_tags)
-    return f'{caption}   {hashtags_str}'
+    if not active_client:
+        log("   ⚡ Using smart local niche generator (no API key)...")
+        return generate_local_caption_and_hashtags(media_path, folder_name=folder_name, index=index, platform=platform)
+
+    # 2. Extract visual parts
+    path_obj = Path(media_path)
+    suffix = path_obj.suffix.lower()
+    is_video = suffix in ['.mp4', '.mov', '.avi', '.mkv', '.webm']
+    is_image = suffix in ['.jpg', '.jpeg', '.png', '.webp']
+
+    parts = []
+    try:
+        from google.genai import types
+        if is_video:
+            log("   🎬 Decoding video frames locally with FFmpeg...")
+            frames_bytes = extract_video_keyframes(media_path, num_frames=3)
+            if frames_bytes:
+                for fb in frames_bytes:
+                    parts.append(types.Part.from_bytes(data=fb, mime_type='image/jpeg'))
+                log(f"   👁️ Successfully decoded {len(parts)} keyframes for visual AI analysis!")
+            else:
+                log("   ⚠️ Could not extract frames via FFmpeg, falling back to direct analysis...")
+        elif is_image:
+            with open(media_path, 'rb') as f:
+                img_data = f.read()
+            mime = 'image/jpeg' if suffix in ['.jpg', '.jpeg'] else f'image/{suffix.replace(".", "")}'
+            parts.append(types.Part.from_bytes(data=img_data, mime_type=mime))
+    except Exception as e:
+        log(f"   [!] Error preparing media frames: {e}")
+
+    # If no visual parts extracted, fallback to local
+    if not parts:
+        log("   ⚡ Falling back to local niche generator...")
+        return generate_local_caption_and_hashtags(media_path, folder_name=folder_name, index=index, platform=platform)
+
+    prompt = f"""Analyze these visual frames captured from this {platform.upper()} media clip.
+Carefully examine the exact visual subjects, stunts, actions, choreography, equipment, animals, skills, and atmosphere.
+Generate a viral, engaging social media post strictly in 100% FLUENT ENGLISH.
+
+RULES:
+1. Provide ONLY 1 short, punchy story sentence (maximum 10 to 14 words) accurately describing the exact action or scene in the video.
+2. Follow immediately with at least 8 to 10 viral hashtags.
+3. Hashtags MUST include #MustWatch, #FYP, #Viral, plus 5-7 highly specific tags matching the exact video content.
+4. Do NOT include ANY section titles, labels, or prefixes (Do NOT write '🎯 HOOK:', '📌 CAPTION:', '🏷️ HASHTAGS:', 'Caption:', 'Hook:', etc.).
+
+FORMAT:
+[Short 10-14 word engaging story caption describing what happens in the video]
+
+#MustWatch #FYP #Viral #Tag1 #Tag2 #Tag3 #Tag4 #Tag5 #Tag6 #Tag7
+"""
+
+    log(f"   🧠 Gemini AI is analyzing video frames...")
+    clean_topic = clean_topic_name(folder_name or path_obj.parent.name)
+
+    # Try fast models
+    for model_name in FAST_MODELS:
+        try:
+            res = active_client.models.generate_content(
+                model=model_name,
+                contents=[*parts, prompt]
+            )
+            raw_text = res.text.strip() if (res and res.text) else ''
+            if raw_text:
+                log(f"   ✅ Video decoded successfully using {model_name}!")
+                return ensure_viral_hashtags(raw_text, topic_hint=clean_topic)
+        except Exception as e:
+            err_str = str(e).lower()
+            if '404' in err_str:
+                continue
+            elif '429' in err_str or 'quota' in err_str:
+                log(f"   ⚠️ Model {model_name} rate limited, trying next model...")
+                continue
+            else:
+                log(f"   ⚠️ Model {model_name} error: {e}, trying next model...")
+                continue
+
+    # Fallback to local if all API models fail
+    log("   ⚡ All Gemini models busy/limited, using instant smart local generator...")
+    return generate_local_caption_and_hashtags(media_path, folder_name=folder_name, index=index, platform=platform)

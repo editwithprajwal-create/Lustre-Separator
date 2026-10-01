@@ -1861,151 +1861,17 @@ class LustreSeparatorApp:
                     self.log(f"[{i}/{total_files}] 🎬 Processing: {media_path.name}")
                     self.log(f"   🎥 Video will be {upscale_label}renamed with Caption & Hashtags directly in output_media")
 
-                uploaded_file = None
-                ai_output = None
-                use_local = (engine_mode == "local") or (client is None)
-
-                if use_local:
-                    self.log(f"   ⚡ [Smart Video SEO] Generating matched Caption & 8-10 Hashtags in 0.001s...")
-                    self.msg_queue.put(("status", f"[{i}/{total_files}] SEO Generating for {media_path.name}..."))
-                    folder_hint = target_folder.name if target_folder else media_path.parent.name
-                    try:
-                        ai_output = local_video_seo.generate_local_caption_and_hashtags(
-                            media_path,
-                            folder_name=folder_hint,
-                            index=i,
-                            platform=platform
-                        )
-                        self.log(f"   ✅ [Smart Video SEO] Video-matched Caption & 8-10 Hashtags ready in 0.001s!")
-                    except Exception as le:
-                        self.log(f"   [!] Local SEO notice: {le}")
-                else:
-                    self.msg_queue.put(("status", f"[{i}/{total_files}] Uploading {media_path.name} to Gemini AI..."))
-                    try:
-                        uploaded_file = client.files.upload(file=str(media_path))
-                        self.log(f"   ⏳ Gemini Files API Registered: {uploaded_file.name}")
-
-                        if is_video:
-                            self.log("   👀 Gemini AI is watching and analyzing video & audio...")
-                            wait_count = 0
-                            while uploaded_file.state.name == "PROCESSING" and wait_count < 120:
-                                if self.stop_requested:
-                                    break
-                                time.sleep(3)
-                                wait_count += 3
-                                uploaded_file = client.files.get(name=uploaded_file.name)
-
-                            if self.stop_requested:
-                                try:
-                                    client.files.delete(name=uploaded_file.name)
-                                except Exception:
-                                    pass
-                                if temp_4k_path and temp_4k_path.exists():
-                                    try:
-                                        temp_4k_path.unlink()
-                                    except Exception:
-                                        pass
-                                self.log("\n🛑 Analysis stopped by user!")
-                                self.msg_queue.put(("finished", "Analysis stopped by user. Remaining files are untouched."))
-                                return
-
-                            if uploaded_file.state.name == "FAILED":
-                                self.log(f"   [!] Video Processing Failed: {uploaded_file.error}")
-                                if temp_4k_path and temp_4k_path.exists():
-                                    try:
-                                        temp_4k_path.unlink()
-                                    except Exception:
-                                        pass
-                                continue
-
-                        if self.stop_requested:
-                            try:
-                                client.files.delete(name=uploaded_file.name)
-                            except Exception:
-                                pass
-                            if temp_4k_path and temp_4k_path.exists():
-                                try:
-                                    temp_4k_path.unlink()
-                                except Exception:
-                                    pass
-                            self.log("\n🛑 Analysis stopped by user!")
-                            self.msg_queue.put(("finished", "Analysis stopped by user. Remaining files are untouched."))
-                            return
-
-                        prompt = f"""Watch and listen to this entire attached video. Analyze what is happening, all dialogue/audio, visual cues, and the core message.
-Generate a viral, engaging social media post for {platform.upper()} strictly in 100% FLUENT ENGLISH.
-
-FORMAT REQUIREMENTS:
-Provide ONLY the story-driven caption followed directly by hashtags.
-Do NOT include ANY section titles, labels, or prefixes (Do NOT write '🎯 HOOK:', '📌 CAPTION:', '🏷️ HASHTAGS:', 'Caption:', 'Hook:', etc.).
-
-CRITICAL LENGTH RULE FOR VIDEO FILENAME:
-Keep the entire output (caption + all hashtags combined) concise, punchy, and strictly within 110-120 characters so that the entire text fits 100% into the video file name without getting cut off. Write 1 impactful sentence for the caption, followed by 3-5 top viral hashtags for {platform.upper()}.
-
-MANDATORY VIRAL HASHTAGS REQUIREMENT:
-You MUST ALWAYS include ultra-viral reach hashtags like #MustWatch and #FYP along with 1-2 content-specific hashtags. Never omit #MustWatch or #FYP!
-
-EXACT FORMAT TO FOLLOW:
-[Engaging, story-driven caption strictly in fluent English describing the key moment, emotion, humor, or situation with appropriate emojis]
-
-#ContentTag #MustWatch #FYP #Viral
-
-EXAMPLE:
-She walks in with her paperwork and family confrontation explodes! 😳📄 Accusations fly. 👀🔥 #FamilyDrama #MustWatch #FYP #ViralReels
-
-CRITICAL RULES:
-- EVERYTHING MUST be written strictly in 100% FLUENT ENGLISH ONLY.
-- Regardless of the spoken language or dialogue in the video (even if Nepali, Hindi, Spanish, etc.), you MUST translate all concepts and write EVERYTHING strictly in 100% FLUENT ENGLISH.
-- Absolutely NO section labels, headers, or markdown titles.
-- Absolutely NO Devanagari, Nepali, Hindi, or non-English script.
-- Do NOT include any intro, outro, explanations, search keywords, or conversational filler.
-- Output ONLY the clean caption followed immediately by the hashtags."""
-
-                        self.log(f"   🤖 Gemini AI is writing pure English Caption & Hashtags...")
-                        for model_name in ACTIVE_MODELS:
-                            if self.stop_requested:
-                                break
-                            try:
-                                resp = client.models.generate_content(
-                                    model=model_name,
-                                    contents=[uploaded_file, prompt]
-                                )
-                                if resp and resp.text:
-                                    ai_output = clean_ai_output(resp.text)
-                                    self.log(f"   ✅ Gemini ({model_name}) generated pure English Caption & Hashtags!")
-                                    break
-                            except Exception as merr:
-                                err_str = str(merr)
-                                is_429 = "429" in err_str or "quota" in err_str.lower() or "resource_exhausted" in err_str.lower()
-                                if is_429:
-                                    self.log(f"   ⚠️ Gemini Quota/Rate limit (429) hit! Switching instantly to Smart Video SEO Engine...")
-                                    folder_hint = target_folder.name if target_folder else media_path.parent.name
-                                    ai_output = local_video_seo.generate_local_caption_and_hashtags(
-                                        media_path,
-                                        folder_name=folder_hint,
-                                        index=i,
-                                        platform=platform
-                                    )
-                                    break
-                                elif "503" in err_str or "404" in err_str or "demand" in err_str.lower():
-                                    time.sleep(1)
-                                    continue
-                                else:
-                                    self.log(f"   [!] Model notice ({model_name}): {err_str[:80]}")
-                                    continue
-
-                    except Exception as e:
-                        self.log(f"   [!] Gemini Error: {e}")
-                    finally:
-                        if uploaded_file:
-                            try:
-                                client.files.delete(name=uploaded_file.name)
-                            except Exception:
-                                pass
-                        uploaded_file = None
-                        import gc
-                        gc.collect()
-                        time.sleep(0.3)
+                folder_hint = target_folder.name if target_folder else media_path.parent.name
+                self.msg_queue.put(("status", f"[{i}/{total_files}] Decoding & analyzing {media_path.name}..."))
+                ai_output = local_video_seo.decode_video_with_gemini(
+                    media_path=media_path,
+                    client=client,
+                    api_key=api_key,
+                    platform=platform,
+                    folder_name=folder_hint,
+                    index=i,
+                    log_callback=self.log
+                )
 
                 if self.stop_requested:
                     if temp_4k_path and temp_4k_path.exists():
@@ -2022,16 +1888,7 @@ CRITICAL RULES:
                     self.log("   ⏳ Finalizing parallel 4K render on GPU...")
                     render_thread.join(timeout=300)
 
-                if not ai_output:
-                    folder_hint = target_folder.name if target_folder else media_path.parent.name
-                    ai_output = local_video_seo.generate_local_caption_and_hashtags(
-                        media_path,
-                        folder_name=folder_hint,
-                        index=i,
-                        platform=platform
-                    )
-                else:
-                    ai_output = clean_ai_output(ai_output)
+                ai_output = clean_ai_output(ai_output)
 
                 if is_direct:
                     self.msg_queue.put(("latest_result", ai_output.strip()))

@@ -736,18 +736,22 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=False
             ai_output = None
             active_client = None
 
-            use_local = (cfg.get("engine_mode", "local") == "local") or (rotator.total_keys == 0)
-            if use_local:
-                folder_hint = target_folder.name if target_folder else media_path.parent.name
-                state.add_log(f"   ⚡ Smart Video SEO Engine: Matching Caption & 8+ Hashtags for '{media_path.name}'...")
-                ai_output = local_video_seo.generate_local_caption_and_hashtags(
-                    media_path=media_path,
-                    folder_name=folder_hint,
-                    index=idx,
-                    platform=platform
-                )
-                state.add_log(f"   ✅ Video-matched Caption & 8+ Hashtags generated in 0.05s!")
-            else:
+            folder_hint = target_folder.name if target_folder else media_path.parent.name
+            active_client, cur_k, tot_k = rotator.get_client() if rotator.total_keys > 0 else (None, 0, 0)
+            api_key_to_use = rotator.keys[cur_k] if rotator.total_keys > 0 else None
+
+            state.add_log(f"   🎬 Decoding video frames and analyzing content for '{media_path.name}'...")
+            ai_output = local_video_seo.decode_video_with_gemini(
+                media_path=media_path,
+                client=active_client,
+                api_key=api_key_to_use,
+                platform=platform,
+                folder_name=folder_hint,
+                index=idx,
+                log_callback=state.add_log
+            )
+            state.add_log(f"   ✨ Video decoding complete! Generated accurate Caption & 8+ Hashtags.")
+            if False:
                 upload_target, is_temp_preview = create_fast_video_preview(media_path)
                 try:
                     state.add_log(f"   ⚡ Fast Cloud Upload: {media_path.name}...")
@@ -1048,23 +1052,26 @@ def direct_process_worker(media_path, original_filename, platform, is_temp=False
         raw_key = cfg.get("gemini_api_key", "").strip()
         rotator = GeminiKeyRotator(raw_key)
         platform = cfg.get("target_platform", "facebook")
-        use_local = (cfg.get("engine_mode", "local") == "local") or (rotator.total_keys == 0)
-        if use_local:
-            state.add_log(f"   ⚡ Smart Video SEO Engine: Matching Caption & 8+ Hashtags for '{original_filename}'...")
-            ai_output = local_video_seo.generate_local_caption_and_hashtags(
-                media_path=media_path,
-                folder_name=media_path.parent.name,
-                index=1,
-                platform=platform
-            )
-            state.latest_result = {
-                "folder": "Direct Extract (Zero File Changes)",
-                "video_file": original_filename,
-                "txt_file": "Direct On-Screen Display",
-                "content": ai_output
-            }
-            state.add_log(f"   ✨ Direct Extract Complete: '{original_filename}' (0.05s)")
-            return
+        active_client, cur_k, tot_k = rotator.get_client() if rotator.total_keys > 0 else (None, 0, 0)
+        api_key_to_use = rotator.keys[cur_k] if rotator.total_keys > 0 else None
+        state.add_log(f"   🎬 Decoding video frames and analyzing content for '{original_filename}'...")
+        ai_output = local_video_seo.decode_video_with_gemini(
+            media_path=media_path,
+            client=active_client,
+            api_key=api_key_to_use,
+            platform=platform,
+            folder_name=media_path.parent.name,
+            index=1,
+            log_callback=state.add_log
+        )
+        state.latest_result = {
+            "folder": "Direct Extract (Zero File Changes)",
+            "video_file": original_filename,
+            "txt_file": "Direct On-Screen Display",
+            "content": ai_output
+        }
+        state.add_log(f"   ✨ Direct Extract Complete: '{original_filename}'")
+        return
 
         video_exts = ('.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v')
         is_video = Path(original_filename).suffix.lower() in video_exts

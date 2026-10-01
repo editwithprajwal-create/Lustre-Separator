@@ -1187,138 +1187,17 @@ class VideoSeparatorGUI:
                 render_thread = threading.Thread(target=_bg_render, daemon=True)
                 render_thread.start()
 
-            uploaded_file = None
-            ai_output = None
-            use_local = (engine_mode == "local") or (client is None)
-
-            if use_local:
-                self.log(f"   ⚡ [Smart Video SEO] भिडियोको Niche अनुसार Caption र 8-10 Hashtags बन्दैछ...")
-                self.msg_queue.put(("status", f"[{i}/{total_files}] SEO Generating for {media_path.name}..."))
-                try:
-                    ai_output = local_video_seo.generate_local_caption_and_hashtags(
-                        media_path,
-                        folder_name=target_folder.name if target_folder else media_path.parent.name,
-                        index=i,
-                        platform=platform
-                    )
-                    self.log(f"   ✅ [Smart Video SEO] भिडियोसँग शतप्रतिशत मिल्ने Caption र 8-10 Hashtags तयार!")
-                except Exception as le:
-                    self.log(f"   [!] Local engine notice: {le}")
-            else:
-                self.msg_queue.put(("status", f"[{i}/{total_files}] Uploading {media_path.name} to Gemini..."))
-                upload_target, is_temp_preview = create_fast_video_preview(media_path)
-
-                try:
-                    uploaded_file = client.files.upload(file=str(upload_target))
-                    self.log(f"   ⚡ Fast Cloud Upload: {uploaded_file.name}")
-                    if is_temp_preview and upload_target.exists():
-                        try:
-                            upload_target.unlink()
-                        except Exception:
-                            pass
-
-                    if is_video:
-                        self.log("   👀 Gemini ले भिडियो दृश्य र संवाद सुन्दै/हेर्दै छ...")
-                        wait_count = 0
-                        while uploaded_file.state.name == "PROCESSING" and wait_count < 60:
-                            if self.stop_requested:
-                                break
-                            time.sleep(0.8)
-                            wait_count += 1
-                            uploaded_file = client.files.get(name=uploaded_file.name)
-
-                        if self.stop_requested:
-                            try:
-                                client.files.delete(name=uploaded_file.name)
-                            except Exception:
-                                pass
-                            self.log("\n🛑 Analysis प्रयोगकर्ताद्वारा रोकियो (Stopped)!")
-                            self.msg_queue.put(("finished", "🛑 Analysis बीचमै रोकियो। बाँकी फाइलहरू सुरक्षित छन्।"))
-                            return
-
-                        if uploaded_file.state.name == "FAILED":
-                            self.log(f"   [!] भिडियो Processing असफल: {uploaded_file.error}")
-                            continue
-
-                    if self.stop_requested:
-                        try:
-                            client.files.delete(name=uploaded_file.name)
-                        except Exception:
-                            pass
-                        self.log("\n🛑 Analysis प्रयोगकर्ताद्वारा रोकियो (Stopped)!")
-                        self.msg_queue.put(("finished", "🛑 Analysis बीचमै रोकियो। बाँकी फाइलहरू सुरक्षित छन्।"))
-                        return
-
-                    prompt = f"""Watch and listen to this entire attached video. Analyze all dialogue/audio, visual cues, humor, action, and key emotion.
-Generate a viral, engaging social media post for {platform.upper()} strictly in 100% FLUENT ENGLISH.
-
-FORMAT REQUIREMENTS:
-Provide ONLY the story-driven caption followed directly by hashtags.
-Do NOT include ANY section titles, labels, or prefixes (Do NOT write '🎯 HOOK:', '📌 CAPTION:', '🏷️ HASHTAGS:', 'Caption:', 'Hook:', etc.).
-
-CRITICAL HASHTAGS RULE (MINIMUM 7-8 VIRAL HASHTAGS):
-You MUST ALWAYS generate a minimum of 7 to 8 viral and relevant hashtags (e.g. 7 to 10 hashtags total).
-Always include #MustWatch, #FYP, #Viral, plus 4-6 specific viral and niche hashtags (e.g. #Trending #Reels #ExplorePage #VideoOfTheDay #ViralReels #ForYouPage).
-Never output fewer than 7 hashtags!
-
-EXACT FORMAT TO FOLLOW:
-[Engaging, 1-2 sentence story-driven caption strictly in fluent English describing the key moment, emotion, humor, or situation with appropriate emojis]
-
-#ContentTag #MustWatch #FYP #Viral #Trending #Reels #ExplorePage #ViralReels
-
-EXAMPLE:
-She walks in with her paperwork and family confrontation explodes! 😳📄 Accusations fly and tempers flare. 👀🔥 #FamilyDrama #MustWatch #FYP #Viral #Trending #ViralReels #ExplorePage #ForYouPage
-
-CRITICAL RULES:
-- EVERYTHING MUST be written strictly in 100% FLUENT ENGLISH ONLY.
-- Regardless of the spoken language or dialogue in the video, write EVERYTHING strictly in 100% FLUENT ENGLISH.
-- Absolutely NO section labels, headers, or markdown titles.
-- Output ONLY the clean caption followed immediately by minimum 7-8 hashtags."""
-
-                    self.log(f"   🤖 Gemini ले Caption र Hashtags लेख्दैछ...")
-                    for model_name in ACTIVE_MODELS:
-                        if self.stop_requested:
-                            break
-                        try:
-                            resp = client.models.generate_content(
-                                model=model_name,
-                                contents=[uploaded_file, prompt]
-                            )
-                            if resp and resp.text:
-                                ai_output = clean_ai_output(resp.text)
-                                self.log(f"   ✅ Gemini ({model_name}) ले Caption र Hashtag तयार गर्‍यो!")
-                                break
-                        except Exception as merr:
-                            err_str = str(merr)
-                            is_429 = "429" in err_str or "quota" in err_str.lower() or "resource_exhausted" in err_str.lower()
-                            if is_429:
-                                self.log(f"   ⚠️ Gemini Quota limit (429) hit! Switching instantly to Smart Video SEO Engine...")
-                                ai_output = local_video_seo.generate_local_caption_and_hashtags(
-                                    media_path,
-                                    folder_name=target_folder.name if target_folder else media_path.parent.name,
-                                    index=i,
-                                    platform=platform
-                                )
-                                break
-                            elif "503" in err_str or "404" in err_str or "demand" in err_str.lower():
-                                time.sleep(1)
-                                continue
-                            else:
-                                self.log(f"   [!] Model notice ({model_name}): {err_str[:80]}")
-                                continue
-
-                except Exception as e:
-                    self.log(f"   [!] Gemini Error: {e}")
-                finally:
-                    if uploaded_file:
-                        try:
-                            client.files.delete(name=uploaded_file.name)
-                        except Exception:
-                            pass
-                    uploaded_file = None
-                    import gc
-                    gc.collect()
-                    time.sleep(0.3)
+            folder_hint = target_folder.name if target_folder else media_path.parent.name
+            self.msg_queue.put(("status", f"[{i}/{total_files}] Decoding & analyzing {media_path.name}..."))
+            ai_output = local_video_seo.decode_video_with_gemini(
+                media_path=media_path,
+                client=client,
+                api_key=api_key,
+                platform=platform,
+                folder_name=folder_hint,
+                index=i,
+                log_callback=self.log
+            )
 
             if self.stop_requested:
                 self.log("\n🛑 Analysis प्रयोगकर्ताद्वारा रोकियो (Stopped)!")
@@ -1330,16 +1209,7 @@ CRITICAL RULES:
                 self.log("   ⏳ Finalizing parallel 4K render on GPU...")
                 render_thread.join(timeout=300)
 
-            # Fallback if Gemini failed so user never gets blank file
-            if not ai_output:
-                ai_output = local_video_seo.generate_local_caption_and_hashtags(
-                    media_path,
-                    folder_name=target_folder.name if target_folder else media_path.parent.name,
-                    index=i,
-                    platform=platform
-                )
-            else:
-                ai_output = clean_ai_output(ai_output)
+            ai_output = clean_ai_output(ai_output)
 
             # Generate video filename directly from AI Caption + Hashtags (zero .txt file)
             output_ext = ".mp4" if (render_status.get("ok") and temp_4k_path and temp_4k_path.exists()) else ext
