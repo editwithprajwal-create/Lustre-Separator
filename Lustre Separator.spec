@@ -27,7 +27,6 @@ a = Analysis(
         'auto_updater',
         'web_server',
         'local_video_seo',
-        'concurrent.futures',
     ],
     hookspath=[],
     hooksconfig={},

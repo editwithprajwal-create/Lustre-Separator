@@ -485,36 +485,23 @@
             <!-- Tab 1: API Key -->
             <div class="settings-tab-pane active" id="paneSettingsApi">
                 <div class="modal-card-body">
-                    <div class="multi-key-header">
-                        <div>
-                            <div class="multi-key-title">
-                                <i class="fa-solid fa-key"></i> Multi-Key Session Manager
-                            </div>
-                            <p class="multi-key-subtitle">
-                                Add 1, 2, 3, or more Gemini API keys. Auto-rotates across all active keys to prevent quota delays.
-                            </p>
-                        </div>
-                        <button type="button" class="btn-add-key-chip" id="btnAddApiKeyRow" title="Add another API key">
-                            <i class="fa-solid fa-plus"></i> Add Key
-                        </button>
+                    <label for="inputApiKey" class="input-label">Gemini API Key (Google AI Studio):</label>
+                    <div class="input-glow-wrapper">
+                        <i class="fa-solid fa-key input-icon"></i>
+                        <input type="password" id="inputApiKey" class="input-control" placeholder="AIzaSy... or AQ.Ab8RN...">
                     </div>
-
-                    <div class="api-keys-list-container" id="apiKeysListContainer">
-                        <!-- Key rows dynamically populated by JS -->
-                    </div>
-
                     <div class="modal-notice">
                         <i class="fa-solid fa-shield-halved"></i>
-                        <span>Keys are stored in <code>config.json</code> and rotated automatically when rate limits (429) occur.</span>
+                        <span>Your key is stored securely in <code>config.json</code> and used strictly for video analysis via Google Gemini API.</span>
                     </div>
                     <p class="modal-link-row">
-                        Get free Gemini keys at: 
+                        Get your free key at: 
                         <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
                     </p>
                 </div>
                 <div class="modal-card-footer">
                     <button id="btnSaveApiKey" class="modal-save-btn">
-                        <i class="fa-solid fa-check"></i> Save All Keys &amp; Connect
+                        <i class="fa-solid fa-check"></i> Save &amp; Connect Key
                     </button>
                 </div>
             </div>

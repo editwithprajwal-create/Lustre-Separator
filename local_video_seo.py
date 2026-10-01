@@ -95,9 +95,11 @@ NICHE_RULES = [
 ]
 
 FAST_MODELS = [
-    'gemini-3.6-flash',
+    'gemini-3.1-flash-lite',
+    'gemini-3.1-flash-lite-preview',
     'gemini-3.5-flash',
     'gemini-3-flash-preview',
+    'gemini-3.6-flash',
     'gemini-3.7-flash',
     'gemini-3.5-flash-lite',
     'gemini-flash-latest'
@@ -128,13 +130,13 @@ def get_video_duration(video_path):
     except Exception:
         return 6.0
 
-def extract_video_keyframes(video_path, num_frames=2):
-    """Extracts 2 ultra-fast sharp keyframes across video duration in ~0.2s with zero window flicker."""
+def extract_video_keyframes(video_path, num_frames=3):
+    """Extracts 3 sharp keyframes across video duration in ~0.5s with zero window flicker."""
     dur = get_video_duration(video_path)
     if dur <= 1.5:
         points = [dur * 0.5]
-    elif num_frames == 2:
-        points = [dur * 0.25, dur * 0.75]
+    elif dur <= 3.0:
+        points = [dur * 0.3, dur * 0.7]
     else:
         points = [dur * 0.2, dur * 0.5, dur * 0.8]
 
@@ -143,10 +145,10 @@ def extract_video_keyframes(video_path, num_frames=2):
     temp_dir = Path(os.environ.get('TEMP', '.'))
 
     for idx, p in enumerate(points):
-        temp_img = temp_dir / f'dec_kf_{os.getpid()}_{threading.get_ident()}_{idx}_{time.time_ns()}.jpg'
+        temp_img = temp_dir / f'dec_kf_{os.getpid()}_{idx}_{int(time.time()*1000)%10000}.jpg'
         cmd = [
             'ffmpeg', '-y', '-ss', f'{p:.2f}', '-i', str(video_path),
-            '-vframes', '1', '-vf', 'scale=480:-2', '-q:v', '5', str(temp_img)
+            '-vframes', '1', '-vf', 'scale=-1:720', '-q:v', '3', str(temp_img)
         ]
         try:
             subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=flags)
@@ -321,7 +323,7 @@ def decode_video_with_gemini(media_path, client=None, api_key=None, platform='fa
         from google.genai import types
         if is_video:
             log("   🎬 Decoding video frames locally with FFmpeg...")
-            frames_bytes = extract_video_keyframes(media_path, num_frames=2)
+            frames_bytes = extract_video_keyframes(media_path, num_frames=3)
             if frames_bytes:
                 for fb in frames_bytes:
                     parts.append(types.Part.from_bytes(data=fb, mime_type='image/jpeg'))

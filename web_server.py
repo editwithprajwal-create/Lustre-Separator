@@ -25,7 +25,6 @@ from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import auto_updater
 import local_video_seo
-import concurrent.futures
 
 # Safe streams for pythonw & UTF-8 stdout on Windows
 if sys.stdout is None:
@@ -86,11 +85,11 @@ DEFAULT_CONFIG = {
 }
 
 ACTIVE_MODELS = [
-    "gemini-3.6-flash",
-    "gemini-3.5-flash",
-    "gemini-3-flash-preview",
-    "gemini-3.7-flash",
+    "gemini-flash-lite-latest",
     "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-3-flash-preview",
+    "gemini-3.5-flash",
     "gemini-flash-latest"
 ]
 
@@ -114,7 +113,6 @@ class GeminiKeyRotator:
                 return None, 0, 0
             idx = self.current_idx % len(self.keys)
             key = self.keys[idx]
-            self.current_idx = (self.current_idx + 1) % len(self.keys)
             from google import genai
             return genai.Client(api_key=key), idx, len(self.keys)
 
@@ -129,38 +127,17 @@ class GeminiKeyRotator:
     def total_keys(self):
         return len(self.keys)
 
-def get_all_configured_keys(cfg):
-    keys = []
-    if isinstance(cfg.get("gemini_api_keys"), list):
-        for k in cfg["gemini_api_keys"]:
-            ks = str(k).strip()
-            if ks and ks not in keys:
-                keys.append(ks)
-    if cfg.get("gemini_api_key"):
-        for k in parse_api_keys(cfg.get("gemini_api_key")):
-            if k and k not in keys:
-                keys.append(k)
-    return keys
-
 def load_config():
     if CONFIG_FILE.exists():
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                keys = get_all_configured_keys(data)
-                merged = {**DEFAULT_CONFIG, **data}
-                merged["gemini_api_keys"] = keys
-                merged["gemini_api_key"] = ", ".join(keys) if keys else ""
-                return merged
+                return {**DEFAULT_CONFIG, **json.load(f)}
         except Exception:
             pass
     return DEFAULT_CONFIG
 
 def save_config(cfg):
     try:
-        keys = get_all_configured_keys(cfg)
-        cfg["gemini_api_keys"] = keys
-        cfg["gemini_api_key"] = ", ".join(keys) if keys else ""
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(cfg, f, indent=4)
     except Exception as e:
@@ -785,7 +762,6 @@ class EngineState:
             }
 
 state = EngineState()
-file_rename_lock = threading.Lock()
 
 def get_input_files():
     video_exts = ('.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v')
@@ -814,41 +790,31 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=False
     try:
         cfg = load_config()
         engine_mode = cfg.get("engine_mode", "local").lower()
-        keys = get_all_configured_keys(cfg)
+        raw_key = cfg.get("gemini_api_key", "").strip()
 
-        rotator = GeminiKeyRotator(keys) if keys else None
+        rotator = GeminiKeyRotator(raw_key) if raw_key else None
         use_system_engine = (engine_mode == "local") or (not rotator or rotator.total_keys == 0)
 
         if use_system_engine:
             state.add_log("⚡ Smart System SEO Engine: 100% Offline, Zero Rate Limit, Instant Processing Active.")
         else:
             if rotator.total_keys > 1:
-                state.add_log(f"🔑 Multi-Key Rotation Active: {rotator.total_keys} Gemini API keys loaded for parallel execution.")
+                state.add_log(f"🔑 Multi-Key Rotation Active: {rotator.total_keys} Gemini API keys loaded.")
 
         video_exts = ('.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v')
 
-        # Decide worker concurrency: 1 worker if 4K upscale (GPU/CPU heavy), up to 3 parallel workers for fast decoding
-        if not direct_mode and upscale_4k:
-            max_workers = 1
-        else:
-            max_workers = min(3, len(file_rel_paths))
-
-        if max_workers > 1:
-            state.add_log(f"🚀 High-Speed Multi-Worker Mode Active: {max_workers} videos processing concurrently in parallel!")
-
-        def _process_single(idx, rel_path):
+        for idx, rel_path in enumerate(file_rel_paths, 1):
             if state.stop_requested:
-                return
+                state.add_log("🛑 Process stopped by user!")
+                break
 
             media_path = INPUT_DIR / rel_path
             if not media_path.exists():
-                with state.lock:
-                    state.progress_current += 1
-                return
+                continue
 
+            state.progress_current = idx
+            state.current_file = media_path.name
             is_video = media_path.suffix.lower() in video_exts
-            with state.lock:
-                state.current_file = media_path.name
 
             # Set up parallel 4K render if enabled, is_video, and not in direct_mode
             render_thread = None
@@ -876,17 +842,22 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=False
             if direct_mode:
                 state.add_log(f"⚡ [{idx}/{len(file_rel_paths)}] Direct Extract: {media_path.name}")
                 state.add_log(f"   🛡️ Zero Modifications: Video will NOT be moved, cut, copied, or renamed.")
+                state.add_log(f"   🛡️ Zero Disk Writes: No output folders or .txt files created on disk.")
                 target_folder = None
                 renamed_filename = media_path.name
             else:
                 ext = media_path.suffix.lower()
                 target_folder = OUTPUT_DIR
                 target_folder.mkdir(parents=True, exist_ok=True)
+
                 upscale_label = "4K Ultra-HD AI Upscale & " if (is_video and upscale_4k) else ""
                 state.add_log(f"🎬 [{idx}/{len(file_rel_paths)}] Processing: {media_path.name}")
                 state.add_log(f"   🎥 Video will be {upscale_label}renamed with Caption & Hashtags directly in output_media")
 
+            uploaded_file = None
             ai_output = None
+            active_client = None
+
             folder_hint = target_folder.name if target_folder else media_path.parent.name
 
             if use_system_engine:
@@ -897,13 +868,12 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=False
                     index=idx,
                     platform=platform
                 )
-                state.add_log(f"   ✨ Generated video-matched Caption & 8+ Hashtags for '{media_path.name}'!")
+                state.add_log(f"   ✨ Generated video-matched Caption & 8+ Hashtags!")
             else:
                 active_client, cur_k, tot_k = rotator.get_client() if (rotator and rotator.total_keys > 0) else (None, 0, 0)
                 api_key_to_use = rotator.keys[cur_k] if (rotator and rotator.total_keys > 0) else None
 
-                key_label = f" (Key #{cur_k+1})" if (rotator and rotator.total_keys > 1) else ""
-                state.add_log(f"   🎬 Decoding video frames and analyzing content for '{media_path.name}'{key_label}...")
+                state.add_log(f"   🎬 Decoding video frames and analyzing content for '{media_path.name}'...")
                 ai_output = local_video_seo.decode_video_with_gemini(
                     media_path=media_path,
                     client=active_client,
@@ -913,10 +883,182 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=False
                     index=idx,
                     log_callback=state.add_log
                 )
-                if ai_output:
-                    state.add_log(f"   ✨ Video decoding complete! Generated accurate Caption & 8+ Hashtags for '{media_path.name}'.")
+                state.add_log(f"   ✨ Video decoding complete! Generated accurate Caption & 8+ Hashtags.")
+            if False:
+                upload_target, is_temp_preview = create_fast_video_preview(media_path)
+                try:
+                    state.add_log(f"   ⚡ Fast Cloud Upload: {media_path.name}...")
+                    for up_att in range(1, 4):
+                        if state.stop_requested:
+                            break
+                        try:
+                            active_client, cur_k, tot_k = rotator.get_client()
+                            uploaded_file = active_client.files.upload(file=str(upload_target))
+                            state.add_log(f"   ⏳ Gemini Files API Active: {uploaded_file.name}")
+                            break
+                        except Exception as up_err:
+                            u_str = str(up_err)
+                            is_429 = "429" in u_str or "quota" in u_str.lower() or "resource_exhausted" in u_str.lower()
+                            if is_429 and rotator.total_keys > 1 and rotator.rotate():
+                                active_client, cur_k, tot_k = rotator.get_client()
+                                state.add_log(f"   🔄 Quota limit (429) on upload. Switching to Key {cur_k + 1}/{tot_k}...")
+                                time.sleep(1)
+                                continue
+                            elif is_429:
+                                wait_sec = up_att * 8
+                                state.add_log(f"   ⏳ Rate limit (429) on upload. Cooldown {wait_sec}s ({up_att}/3)...")
+                                for _ in range(wait_sec):
+                                    if state.stop_requested: break
+                                    time.sleep(1)
+                            else:
+                                state.add_log(f"   [!] Upload retry notice: {u_str[:80]}")
+                                time.sleep(1)
 
-            # Video-matched local SEO fallback if Gemini was unavailable
+                    if not uploaded_file:
+                        state.add_log(f"   ❌ Could not upload {media_path.name} to Gemini. Skipping file.")
+                        if temp_4k_path and temp_4k_path.exists():
+                            try:
+                                temp_4k_path.unlink()
+                            except Exception:
+                                pass
+                        continue
+
+                    if is_video:
+                        state.add_log("   👀 Gemini AI is watching and analyzing video & audio...")
+                        wait_count = 0
+                        while uploaded_file.state.name == "PROCESSING" and wait_count < 60:
+                            if state.stop_requested:
+                                break
+                            time.sleep(0.8)
+                            wait_count += 1
+                            uploaded_file = active_client.files.get(name=uploaded_file.name)
+
+                        if state.stop_requested:
+                            try:
+                                active_client.files.delete(name=uploaded_file.name)
+                            except Exception:
+                                pass
+                            state.add_log("🛑 Analysis cancelled during video processing!")
+                            if temp_4k_path and temp_4k_path.exists():
+                                try:
+                                    temp_4k_path.unlink()
+                                except Exception:
+                                    pass
+                            break
+
+                        if uploaded_file.state.name == "FAILED":
+                            state.add_log(f"   [!] Gemini Video Processing Failed: {uploaded_file.error}")
+                            if temp_4k_path and temp_4k_path.exists():
+                                try:
+                                    temp_4k_path.unlink()
+                                except Exception:
+                                    pass
+                            continue
+
+                    if state.stop_requested:
+                        try:
+                            active_client.files.delete(name=uploaded_file.name)
+                        except Exception:
+                            pass
+                        if temp_4k_path and temp_4k_path.exists():
+                            try:
+                                temp_4k_path.unlink()
+                            except Exception:
+                                pass
+                        state.add_log("🛑 Analysis cancelled by user!")
+                        break
+
+                    prompt = f"""Watch and listen to this entire attached video. Analyze all dialogue/audio, visual cues, humor, action, and key emotion.
+Generate a viral, engaging social media post for {platform.upper()} strictly in 100% FLUENT ENGLISH.
+
+FORMAT REQUIREMENTS:
+Provide ONLY the story-driven caption followed directly by hashtags.
+Do NOT include ANY section titles, labels, or prefixes (Do NOT write '🎯 HOOK:', '📌 CAPTION:', '🏷️ HASHTAGS:', 'Caption:', 'Hook:', etc.).
+
+CRITICAL CAPTION LENGTH RULE (ZERO CUT-OFF WORDS):
+1. Write EXACTLY 1 PUNCHY, COMPLETE VIRAL SENTENCE (strictly between 50 and 80 characters, around 10 to 14 words) with vibrant emojis describing the key action, skill, humor, or moment in the video.
+2. The sentence MUST be completely finished and end cleanly with an exclamation mark (!) or period (.) and emojis. Never write overly long multi-sentence paragraphs that would get cut off.
+
+CRITICAL HASHTAGS RULE (MINIMUM 7-8 VIRAL HASHTAGS):
+Follow immediately with 7 to 9 viral and relevant hashtags (e.g. #MustWatch, #FYP, #Viral, plus 4-6 specific content hashtags matching what is happening in the video).
+
+EXACT FORMAT:
+[1 complete punchy sentence strictly 50-80 chars with vibrant emojis ending with ! or .]   #MustWatch #FYP #Viral #VideoSpecificTag1 #Tag2 #Tag3 #Tag4 #Tag5
+
+EXAMPLE:
+Fearless acrobats execute a jaw-dropping aerial leap! 🎪✨🔥 #MustWatch #FYP #Viral #ViralMoment #Acrobatics #CircusLife #StuntPerformer #ExplorePage
+
+CRITICAL RULES:
+- EVERYTHING MUST be written strictly in 100% FLUENT ENGLISH ONLY.
+- Regardless of the spoken language or dialogue in the video, write EVERYTHING strictly in 100% FLUENT ENGLISH.
+- Absolutely NO section labels, headers, or markdown titles.
+- Output ONLY the clean caption followed immediately by hashtags."""
+
+                    state.add_log(f"   🤖 Gemini AI generating Caption & 7-8+ Hashtags for {platform.upper()}...")
+                    for model_name in ACTIVE_MODELS:
+                        if state.stop_requested or ai_output:
+                            break
+                        for retry_round in range(1, 4):
+                            if state.stop_requested or ai_output:
+                                break
+                            try:
+                                client_to_use, cur_k, tot_k = rotator.get_client()
+                                resp = client_to_use.models.generate_content(
+                                    model=model_name,
+                                    contents=[uploaded_file, prompt]
+                                )
+                                if resp and resp.text:
+                                    ai_output = clean_ai_output(resp.text)
+                                    state.add_log(f"   ✅ Gemini ({model_name}) generated pure English Caption & Hashtags!")
+                                    break
+                            except Exception as merr:
+                                err_str = str(merr)
+                                is_429 = "429" in err_str or "quota" in err_str.lower() or "resource_exhausted" in err_str.lower()
+                                if is_429:
+                                    if rotator.total_keys > 1 and rotator.rotate():
+                                        client_to_use, cur_k, tot_k = rotator.get_client()
+                                        state.add_log(f"   🔄 Quota limit (429) on {model_name}. Switching to API Key {cur_k + 1}/{tot_k}...")
+                                        time.sleep(1.5)
+                                        continue
+                                    else:
+                                        state.add_log(f"   ⚡ Rate limit (429) on Gemini. Instantly switching to Smart Video SEO Engine...")
+                                        folder_hint = target_folder.name if target_folder else media_path.parent.name
+                                        ai_output = local_video_seo.generate_local_caption_and_hashtags(
+                                            media_path=media_path,
+                                            folder_name=folder_hint,
+                                            index=idx,
+                                            platform=platform
+                                        )
+                                        break
+                                elif "503" in err_str or "404" in err_str or "demand" in err_str.lower():
+                                    time.sleep(1)
+                                    break
+                                else:
+                                    state.add_log(f"   [!] Model notice ({model_name}): {err_str[:80]}")
+                                    break
+
+                        if ai_output:
+                            break
+
+                except Exception as e:
+                    state.add_log(f"   [!] Gemini Notice: {e}")
+                finally:
+                    if is_temp_preview and upload_target.exists():
+                        try:
+                            upload_target.unlink()
+                        except Exception:
+                            pass
+                    if uploaded_file and active_client:
+                        try:
+                            active_client.files.delete(name=uploaded_file.name)
+                        except Exception:
+                            pass
+                    uploaded_file = None
+                    import gc
+                    gc.collect()
+                    time.sleep(0.1)
+
+            # Video-matched local SEO if Gemini was not available or rate limited
             if not ai_output:
                 folder_hint = target_folder.name if target_folder else media_path.parent.name
                 ai_output = local_video_seo.generate_local_caption_and_hashtags(
@@ -933,7 +1075,8 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=False
                         temp_4k_path.unlink()
                     except Exception:
                         pass
-                return
+                state.add_log("🛑 Analysis stopped by user! No further files will be moved.")
+                break
 
             # If 4K render was running in background, wait for it to finish
             if render_thread and render_thread.is_alive():
@@ -941,37 +1084,34 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=False
                 render_thread.join(timeout=300)
 
             if direct_mode:
-                with state.lock:
-                    state.latest_result = {
-                        "folder": "Direct Extract (Zero File Changes)",
-                        "video_file": media_path.name,
-                        "txt_file": "Direct On-Screen Display",
-                        "content": ai_output
-                    }
-                    state.progress_current += 1
+                state.latest_result = {
+                    "folder": "Direct Extract (Zero File Changes)",
+                    "video_file": media_path.name,
+                    "txt_file": "Direct On-Screen Display",
+                    "content": ai_output
+                }
                 state.add_log(f"   ✨ Direct Extract Complete for: '{media_path.name}' (Original 100% untouched)")
             else:
+                # Use .mp4 if 4K rendered successfully, otherwise original ext
                 output_ext = ".mp4" if (render_status.get("ok") and temp_4k_path and temp_4k_path.exists() and temp_4k_path.stat().st_size > 0) else ext
 
-                with file_rename_lock:
-                    renamed_filename = generate_video_filename(ai_output, output_ext, target_folder, fallback_stem=media_path.stem)
-                    target_media = target_folder / renamed_filename
-                    try:
-                        target_media.touch(exist_ok=False)
-                    except Exception:
-                        pass
+                # Generate video filename directly from AI Caption + Hashtags (zero .txt file)
+                renamed_filename = generate_video_filename(ai_output, output_ext, target_folder, fallback_stem=media_path.stem)
+                target_media = target_folder / renamed_filename
 
                 import gc
                 gc.collect()
-                time.sleep(0.15)
+                time.sleep(0.3)
 
                 if render_status.get("ok") and temp_4k_path and temp_4k_path.exists() and temp_4k_path.stat().st_size > 0:
+                    # Move 4K rendered video to target_media in output_media
                     safe_move_file(temp_4k_path, target_media)
                     state.add_log(f"   ✨ 4K Ultra-HD Video successfully saved to output_media!")
+                    # Cleanly CUT / delete original from input_media
                     for _ in range(5):
                         try:
                             gc.collect()
-                            time.sleep(0.1)
+                            time.sleep(0.2)
                             import os
                             os.chmod(str(media_path), 0o777)
                             media_path.unlink()
@@ -979,18 +1119,26 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=False
                         except Exception:
                             pass
                 else:
+                    # Fallback: strictly CUT original media from input_media into output_media
                     safe_move_file(media_path, target_media)
                     if media_path.exists():
                         for _ in range(5):
                             try:
                                 gc.collect()
-                                time.sleep(0.1)
+                                time.sleep(0.2)
                                 import os
                                 os.chmod(str(media_path), 0o777)
                                 media_path.unlink()
                                 break
                             except Exception:
                                 pass
+
+                state.latest_result = {
+                    "folder": target_folder.name if target_folder else "output_media",
+                    "video_file": renamed_filename,
+                    "txt_file": "",
+                    "content": ai_output
+                }
 
                 # Clean up empty parent folder inside input_media if it was inside a subfolder
                 if media_path.parent != INPUT_DIR:
@@ -1005,32 +1153,16 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=False
 
                 state.add_log(f"   ✂️  CUT & RENAMED ➔ {renamed_filename}")
 
-                with state.lock:
-                    state.latest_result = {
-                        "folder": target_folder.name if target_folder else "output_media",
-                        "video_file": renamed_filename,
-                        "txt_file": "",
-                        "content": ai_output
-                    }
-                    state.progress_current += 1
+                state.latest_result = {
+                    "folder": "",
+                    "video_file": renamed_filename,
+                    "txt_file": "",
+                    "content": ai_output
+                }
 
-        if max_workers == 1:
-            for idx, rel_path in enumerate(file_rel_paths, 1):
-                if state.stop_requested:
-                    state.add_log("🛑 Process stopped by user!")
-                    break
-                _process_single(idx, rel_path)
+                # Polite pacing delay between batch videos to protect RPM quota
                 if idx < len(file_rel_paths) and not state.stop_requested:
-                    time.sleep(1.0)
-        else:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = []
-                for idx, rel_path in enumerate(file_rel_paths, 1):
-                    if state.stop_requested:
-                        break
-                    futures.append(executor.submit(_process_single, idx, rel_path))
-                    time.sleep(0.3)
-                concurrent.futures.wait(futures)
+                    time.sleep(2.0)
 
         if not state.stop_requested:
             state.add_log(f"🎉 Success! Finished processing {len(file_rel_paths)} video(s).")
@@ -1058,8 +1190,8 @@ def direct_process_worker(media_path, original_filename, platform, is_temp=False
     try:
         cfg = load_config()
         engine_mode = cfg.get("engine_mode", "local").lower()
-        keys = get_all_configured_keys(cfg)
-        rotator = GeminiKeyRotator(keys) if keys else None
+        raw_key = cfg.get("gemini_api_key", "").strip()
+        rotator = GeminiKeyRotator(raw_key) if raw_key else None
         platform = cfg.get("target_platform", "facebook")
         use_system_engine = (engine_mode == "local") or (not rotator or rotator.total_keys == 0)
 
