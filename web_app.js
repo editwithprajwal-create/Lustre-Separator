@@ -52,7 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnOpenSettings = document.getElementById('btnOpenSettings');
     const btnCloseSettings = document.getElementById('btnCloseSettings');
     const settingsModal = document.getElementById('settingsModal');
-    const inputApiKey = document.getElementById('inputApiKey');
+    const btnAddApiKeyRow = document.getElementById('btnAddApiKeyRow');
+    const apiKeysListContainer = document.getElementById('apiKeysListContainer');
     const btnSaveApiKey = document.getElementById('btnSaveApiKey');
 
     // Studio Pro Menu Elements
@@ -773,6 +774,91 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Multi-Key Session Manager Functions
+    function createApiKeyRow(keyVal = '', index = 0) {
+        const row = document.createElement('div');
+        row.className = 'api-key-row';
+
+        const badge = document.createElement('span');
+        badge.className = 'key-row-badge';
+        badge.textContent = `Key #${index + 1}`;
+
+        const input = document.createElement('input');
+        input.type = 'password';
+        input.className = 'key-row-input';
+        input.placeholder = 'AIzaSy... or AQ.Ab8RN...';
+        input.value = keyVal;
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+
+        const btnToggle = document.createElement('button');
+        btnToggle.type = 'button';
+        btnToggle.className = 'key-action-btn toggle-visibility';
+        btnToggle.title = 'Show/Hide Key';
+        btnToggle.innerHTML = '<i class="fa-solid fa-eye"></i>';
+        btnToggle.addEventListener('click', () => {
+            if (input.type === 'password') {
+                input.type = 'text';
+                btnToggle.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
+            } else {
+                input.type = 'password';
+                btnToggle.innerHTML = '<i class="fa-solid fa-eye"></i>';
+            }
+        });
+
+        const btnDel = document.createElement('button');
+        btnDel.type = 'button';
+        btnDel.className = 'key-action-btn delete';
+        btnDel.title = 'Remove this Key';
+        btnDel.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
+        btnDel.addEventListener('click', () => {
+            const rows = apiKeysListContainer.querySelectorAll('.api-key-row');
+            if (rows.length <= 1) {
+                input.value = '';
+                return;
+            }
+            row.remove();
+            refreshKeyRowBadges();
+        });
+
+        row.appendChild(badge);
+        row.appendChild(input);
+        row.appendChild(btnToggle);
+        row.appendChild(btnDel);
+        return row;
+    }
+
+    function refreshKeyRowBadges() {
+        if (!apiKeysListContainer) return;
+        const rows = apiKeysListContainer.querySelectorAll('.api-key-row');
+        rows.forEach((r, idx) => {
+            const badge = r.querySelector('.key-row-badge');
+            if (badge) badge.textContent = `Key #${idx + 1}`;
+        });
+    }
+
+    function renderApiKeyRows(keys) {
+        if (!apiKeysListContainer) return;
+        apiKeysListContainer.innerHTML = '';
+        const list = (Array.isArray(keys) && keys.length > 0) ? keys : [''];
+        list.forEach((k, idx) => {
+            apiKeysListContainer.appendChild(createApiKeyRow(k, idx));
+        });
+        refreshKeyRowBadges();
+    }
+
+    if (btnAddApiKeyRow) {
+        btnAddApiKeyRow.addEventListener('click', () => {
+            if (!apiKeysListContainer) return;
+            const currentCount = apiKeysListContainer.querySelectorAll('.api-key-row').length;
+            const newRow = createApiKeyRow('', currentCount);
+            apiKeysListContainer.appendChild(newRow);
+            refreshKeyRowBadges();
+            const inp = newRow.querySelector('.key-row-input');
+            if (inp) inp.focus();
+        });
+    }
+
     // Settings Modal
     btnOpenSettings.addEventListener('click', async () => {
         if (studioProMenu) studioProMenu.classList.remove('show');
@@ -781,10 +867,17 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch(`${API_BASE}/api/config`);
             const cfg = await res.json();
-            inputApiKey.value = cfg.gemini_api_key || '';
+            let keys = [];
+            if (Array.isArray(cfg.gemini_api_keys) && cfg.gemini_api_keys.length > 0) {
+                keys = cfg.gemini_api_keys.map(k => String(k).trim()).filter(Boolean);
+            } else if (cfg.gemini_api_key) {
+                keys = String(cfg.gemini_api_key).split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+            }
+            renderApiKeyRows(keys);
             settingsModal.classList.add('show');
             settingsModal.classList.add('active');
         } catch (err) {
+            renderApiKeyRows(['']);
             settingsModal.classList.add('show');
             settingsModal.classList.add('active');
         }
@@ -796,18 +889,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     btnSaveApiKey.addEventListener('click', async () => {
-        const key = inputApiKey.value.trim();
+        let keys = [];
+        if (apiKeysListContainer) {
+            const inputs = apiKeysListContainer.querySelectorAll('.key-row-input');
+            keys = Array.from(inputs).map(inp => inp.value.trim()).filter(Boolean);
+        }
         try {
             await fetch(`${API_BASE}/api/config`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ gemini_api_key: key })
+                body: JSON.stringify({
+                    gemini_api_keys: keys,
+                    gemini_api_key: keys.join(', ')
+                })
             });
-            showToast('✅ Gemini API Key connected & saved!');
+            showToast(`✅ ${keys.length} Gemini API Key(s) saved & active for auto-rotation!`);
             settingsModal.classList.remove('show');
             settingsModal.classList.remove('active');
         } catch (err) {
-            showToast('❌ Failed to save key');
+            showToast('❌ Failed to save keys');
         }
     });
 
