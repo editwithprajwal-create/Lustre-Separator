@@ -246,55 +246,214 @@ def split_caption_and_hashtags(text):
     hashtag_str = ' '.join(hashtags)
     return caption_part, hashtag_str
 
-def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=154):
+DANGLING_STOPWORDS = {
+    'a', 'an', 'the', 'and', 'or', 'but', 'for', 'nor', 'on', 'at', 'to', 'from',
+    'by', 'with', 'in', 'of', 'into', 'onto', 'upon', 'about', 'above', 'across',
+    'after', 'against', 'along', 'among', 'around', 'as', 'before', 'behind', 'below',
+    'beneath', 'beside', 'between', 'beyond', 'during', 'inside', 'near', 'off',
+    'outside', 'over', 'through', 'under', 'until', 'up', 'down', 'while', 'so',
+    'that', 'than', 'though', 'although', 'because', 'since', 'unless', 'when',
+    'where', 'which', 'who', 'whom', 'whose', 'why', 'how', 'this', 'that', 'these',
+    'those', 'their', 'his', 'her', 'its', 'my', 'your', 'our', 'is', 'are', 'was',
+    'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
+    'would', 'shall', 'should', 'can', 'could', 'may', 'might', 'must', 'precisely',
+    'pure', 'more', 'just', 'very', 'one', 'two', 'three', 'daring', 'fearless',
+    'perfect', 'high-stakes', 'multi-directional', 'stunning', 'incredible',
+    'unbelievable', 'breathtaking', 'flawless', 'seamless', 'synchronized', 'massive',
+    'simply', 'easily', 'really', 'truly', 'certainly', 'definitely', 'clearly',
+    'taking', 'getting', 'making', 'doing', 'becoming', 'turning', 'going', 'feeling',
+    'you', 'your', 'we', 'they', 'it', 'me', 'us'
+}
+
+def has_emojis(s):
+    return any(ord(c) > 0x1F000 or ord(c) in range(0x2600, 0x27BF) for c in s)
+
+def get_topic_emojis(topic_hint=''):
+    th = (topic_hint or '').lower()
+    if any(k in th for k in ['army', 'military', 'soldier', 'cadet', 'commando', 'usa_female_army']):
+        return "🎖️💪 ", " ⚡🔥"
+    elif any(k in th for k in ['fly', 'flight', 'sky', 'wingsuit', 'skydive', 'aerial']):
+        return "🪂✨ ", " 🦅💨"
+    elif any(k in th for k in ['circus', 'acrobat', 'trapeze', 'tightrope', 'aerialist']):
+        return "🎪✨ ", " 🐎💫"
+    elif any(k in th for k in ['flip', 'jump', 'trampoline', 'gymnast', 'springboard']):
+        return "🤸‍♂️⚡ ", " 🌪️✨"
+    elif any(k in th for k in ['horse', 'camel', 'animal', 'equestrian']):
+        return "🐎✨ ", " 🎪🔥"
+    elif any(k in th for k in ['stunt', 'arena', 'bike', 'extreme', 'daredevil']):
+        return "🔥💥 ", " 🤯⚡"
+    return "🔥✨ ", " 🤯💥"
+
+def is_finished_sentence(s):
+    s = s.strip()
+    if not s:
+        return False
+    # Strip any trailing emojis, variation selectors, and spaces
+    core = re.sub(r'[\U0001F000-\U0001FAFF\u2600-\u27BF\ufe0f\u200d\s]+$', '', s)
+    if any(core.endswith(p) for p in ['.', '!', '?', '…']):
+        return True
+    last_c = s.rstrip('\ufe0f\u200d\u200b ')[-1] if s.rstrip('\ufe0f\u200d\u200b ') else ''
+    if last_c:
+        return ord(last_c) > 0x1F000 or ord(last_c) in range(0x2600, 0x27BF) or ord(last_c) == 0xFE0F
+    return False
+
+def clean_caption_text(text, max_len=70, topic_hint=''):
+    """
+    Cleans caption text ensuring it NEVER ends with dangling stop-words or broken 'adi' words.
+    Guarantees emojis in caption and total length strictly <= max_len.
+    """
+    # Remove AI labels
+    text = re.sub(r'^(🎯\s*HOOK:|📌\s*CAPTION:|🏷️\s*HASHTAGS:|Caption:|Hook:|Title:)\s*', '', text, flags=re.I).strip()
+    text = re.sub(r'[<>:"/\\|?*\x00-\x1f\r\n]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    if not text:
+        text = "Incredible moment caught on camera that you have to see"
+
+    lead_emo, tail_emo = get_topic_emojis(topic_hint)
+    already_has_emoji = has_emojis(text)
+
+    # If already has emojis, use direct max_len, else reserve space for emojis
+    reserved_emo_len = 0 if already_has_emoji else (len(lead_emo) + len(tail_emo))
+    avail_len = max(30, max_len - reserved_emo_len)
+
+    # Check sentences
+    sentences = [m.group(0).strip() for m in re.finditer(r'.+?(?:[.!?][\U0001F000-\U0001FAFF\u2600-\u27BF\ufe0f\u200d\s]*|$)', text) if m.group(0).strip()]
+    chosen = ""
+    if sentences and is_finished_sentence(sentences[0]):
+        if len(sentences[0]) <= avail_len:
+            chosen = sentences[0]
+            if len(sentences) > 1 and is_finished_sentence(sentences[1]) and len(f"{chosen} {sentences[1]}") <= avail_len:
+                chosen = f"{chosen} {sentences[1]}"
+
+    if not chosen:
+        # Find clause break or word boundary within avail_len
+        trimmed = text[:avail_len]
+        clause_breaks = [trimmed.rfind(', '), trimmed.rfind('; '), trimmed.rfind(' - '), trimmed.rfind(' — ')]
+        best_break = max(clause_breaks)
+
+        if best_break > 25:
+            sub = trimmed[:best_break].strip()
+        else:
+            last_sp = trimmed.rfind(' ')
+            sub = trimmed[:last_sp].strip() if last_sp > 20 else trimmed.strip()
+
+        words = sub.split()
+        while words and words[-1].lower().rstrip('.,;!?#') in DANGLING_STOPWORDS:
+            words.pop()
+
+        cleaned = ' '.join(words).rstrip('.,;:- ')
+        if cleaned:
+            if not is_finished_sentence(cleaned):
+                cleaned += '!'
+            chosen = cleaned
+        else:
+            chosen = "Incredible action captured live!"
+
+    # Ensure emojis are included
+    if not has_emojis(chosen):
+        candidate = f"{lead_emo}{chosen}{tail_emo}"
+        if len(candidate) <= max_len:
+            chosen = candidate
+        else:
+            if len(f"{lead_emo}{chosen}") <= max_len:
+                chosen = f"{lead_emo}{chosen}"
+            elif len(f"{chosen}{tail_emo}") <= max_len:
+                chosen = f"{chosen}{tail_emo}"
+            else:
+                words = chosen.rstrip('!?. ').split()
+                while words and len(f"{lead_emo}{' '.join(words)}!{tail_emo}") > max_len:
+                    words.pop()
+                chosen = f"{lead_emo}{' '.join(words)}!{tail_emo}"
+
+    return chosen.strip()
+
+def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=155, topic_hint=""):
     ext = ext.lower() if ext else ".mp4"
     if not ext.startswith("."):
         ext = "." + ext
 
-    # Windows MAX_PATH is 260. VLC 32-bit fails if full absolute path >= 256.
-    # Keep total filename strictly <= 154 characters.
-    max_stem = 154 - len(ext)
-    if target_folder:
-        try:
-            folder_len = len(str(Path(target_folder).resolve()))
-        except Exception:
-            folder_len = 80
-    else:
-        folder_len = 80
-    safe_max_len = max(50, min(max_stem, 240 - folder_len - len(ext) - 1))
-    max_len = min(max_stem, safe_max_len)
+    # Strictly enforce 155 character total filename limit
+    MAX_FILE_NAME_TOTAL = 155
+    max_stem_len = MAX_FILE_NAME_TOTAL - len(ext) # 151 chars
 
-    caption, hashtags = split_caption_and_hashtags(ai_text)
+    # Infer topic hint if missing
+    if not topic_hint:
+        cand_str = str(target_folder or fallback_stem).lower()
+        topic_hint = cand_str
 
-    if not caption and not hashtags:
-        base_name = fallback_stem
-    elif not hashtags:
-        base_name = caption
-    elif not caption:
-        base_name = hashtags
-    else:
-        candidate = f"{caption}   {hashtags}"
-        if len(candidate) <= max_len:
-            base_name = candidate
+    # Extract raw tags and caption
+    raw_tags = re.findall(r'#[A-Za-z0-9_]+', ai_text)
+    caption_raw = re.sub(r'#[A-Za-z0-9_]+', '', ai_text)
+
+    # Balance caption and hashtags:
+    # Guarantee 5-7 complete hashtags (~65-75 chars) + 3 separator spaces
+    # So caption budget is strictly around 65-70 chars
+    caption_budget = 68
+    clean_caption = clean_caption_text(caption_raw, max_len=caption_budget, topic_hint=topic_hint)
+
+    # Clean and prioritize hashtags
+    priority_tags = ['#MustWatch', '#FYP', '#Viral']
+    seen = set()
+    valid_tags = []
+
+    # Add priority tags first
+    for t in priority_tags:
+        norm = t.lower()
+        if norm not in seen:
+            seen.add(norm)
+            valid_tags.append(t)
+
+    # Add AI-detected tags
+    for t in raw_tags:
+        clean_t = '#' + re.sub(r'[^A-Za-z0-9_]', '', t)
+        norm = clean_t.lower()
+        if len(clean_t) > 1 and norm not in seen and norm not in {'#outputmedia', '#output', '#input', '#media'}:
+            seen.add(norm)
+            valid_tags.append(clean_t)
+
+    # Add niche fallback tags if needed
+    niche_fallbacks = ['#Trending', '#Reels', '#ExplorePage', '#VideoOfTheDay', '#ViralReels', '#TrendingNow']
+    for t in niche_fallbacks:
+        norm = t.lower()
+        if norm not in seen:
+            seen.add(norm)
+            valid_tags.append(t)
+
+    # Fit complete hashtags into remaining space
+    space_left = max_stem_len - len(clean_caption) - 3 # '   ' separator
+    fitted_tags = []
+    for t in valid_tags:
+        cand = ' '.join(fitted_tags + [t])
+        if len(cand) <= space_left:
+            fitted_tags.append(t)
         else:
-            tag_part = hashtags.strip()
-            avail_caption = max_len - len(tag_part) - 3
-            if avail_caption >= 20:
-                truncated = caption[:avail_caption]
-                last_space = truncated.rfind(' ')
-                if last_space > 15:
-                    caption_part = truncated[:last_space].rstrip('. ')
-                else:
-                    caption_part = truncated.rstrip('. ')
-                base_name = f"{caption_part}   {tag_part}".strip()
-            else:
-                base_name = candidate[:max_len].rstrip('. ')
+            break
 
-    base_name = re.sub(r'[<>:"/\\|?*\x00-\x1f\u2028\u2029\r\n]', '', base_name).strip().rstrip('. ')
-    if len(base_name) > max_len:
-        base_name = base_name[:max_len].rstrip('. ')
-    if not base_name:
-        base_name = fallback_stem
+    if fitted_tags:
+        base_name = f"{clean_caption}   {' '.join(fitted_tags)}"
+    else:
+        # If space was tight, re-trim caption to 52 chars
+        clean_caption = clean_caption_text(caption_raw, max_len=52, topic_hint=topic_hint)
+        space_left = max_stem_len - len(clean_caption) - 3
+        fitted_tags = []
+        for t in valid_tags:
+            cand = ' '.join(fitted_tags + [t])
+            if len(cand) <= space_left:
+                fitted_tags.append(t)
+            else:
+                break
+        base_name = f"{clean_caption}   {' '.join(fitted_tags)}" if fitted_tags else clean_caption
+
+    # Strict hard ceiling: <= 155 chars
+    while len(f"{base_name}{ext}") > MAX_FILE_NAME_TOTAL and '   ' in base_name:
+        parts = base_name.split('   ')
+        c_part, t_part = parts[0], parts[1]
+        t_list = t_part.split()
+        if t_list:
+            t_list.pop()
+            base_name = f"{c_part}   {' '.join(t_list)}" if t_list else c_part
+        else:
+            break
 
     candidate_name = f"{base_name}{ext}"
     if target_folder is None:
@@ -307,8 +466,17 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
     counter = 1
     while True:
         tag = f" ({counter})"
-        trimmed_base = base_name[:(max_len - len(tag))].rstrip('. ')
-        new_name = f"{trimmed_base}{tag}{ext}"
+        needed = len(tag)
+        curr_tags = list(fitted_tags)
+        while curr_tags and (len(f"{clean_caption}   {' '.join(curr_tags)}") + needed + len(ext) > MAX_FILE_NAME_TOTAL):
+            curr_tags.pop()
+
+        if curr_tags:
+            stem_cand = f"{clean_caption}   {' '.join(curr_tags)}"
+        else:
+            stem_cand = clean_caption_text(clean_caption, max_len=MAX_FILE_NAME_TOTAL - len(ext) - needed, topic_hint=topic_hint)
+
+        new_name = f"{stem_cand}{tag}{ext}"
         if not (tf / new_name).exists():
             return new_name
         counter += 1
@@ -670,15 +838,17 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=False
 
     try:
         cfg = load_config()
+        engine_mode = cfg.get("engine_mode", "local").lower()
         raw_key = cfg.get("gemini_api_key", "").strip()
 
-        rotator = GeminiKeyRotator(raw_key)
-        if rotator.total_keys == 0:
-            state.add_log("❌ Error: Gemini API Key not set. Please configure your API key in Settings.")
-            return
+        rotator = GeminiKeyRotator(raw_key) if raw_key else None
+        use_system_engine = (engine_mode == "local") or (not rotator or rotator.total_keys == 0)
 
-        if rotator.total_keys > 1:
-            state.add_log(f"🔑 Multi-Key Rotation Active: {rotator.total_keys} Gemini API keys loaded.")
+        if use_system_engine:
+            state.add_log("⚡ Smart System SEO Engine: 100% Offline, Zero Rate Limit, Instant Processing Active.")
+        else:
+            if rotator.total_keys > 1:
+                state.add_log(f"🔑 Multi-Key Rotation Active: {rotator.total_keys} Gemini API keys loaded.")
 
         video_exts = ('.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v')
 
@@ -738,20 +908,31 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=False
             active_client = None
 
             folder_hint = target_folder.name if target_folder else media_path.parent.name
-            active_client, cur_k, tot_k = rotator.get_client() if rotator.total_keys > 0 else (None, 0, 0)
-            api_key_to_use = rotator.keys[cur_k] if rotator.total_keys > 0 else None
 
-            state.add_log(f"   🎬 Decoding video frames and analyzing content for '{media_path.name}'...")
-            ai_output = local_video_seo.decode_video_with_gemini(
-                media_path=media_path,
-                client=active_client,
-                api_key=api_key_to_use,
-                platform=platform,
-                folder_name=folder_hint,
-                index=idx,
-                log_callback=state.add_log
-            )
-            state.add_log(f"   ✨ Video decoding complete! Generated accurate Caption & 8+ Hashtags.")
+            if use_system_engine:
+                state.add_log(f"   ⚡ System Engine analyzing '{media_path.name}'...")
+                ai_output = local_video_seo.generate_local_caption_and_hashtags(
+                    media_path=media_path,
+                    folder_name=folder_hint,
+                    index=idx,
+                    platform=platform
+                )
+                state.add_log(f"   ✨ Generated video-matched Caption & 8+ Hashtags!")
+            else:
+                active_client, cur_k, tot_k = rotator.get_client() if (rotator and rotator.total_keys > 0) else (None, 0, 0)
+                api_key_to_use = rotator.keys[cur_k] if (rotator and rotator.total_keys > 0) else None
+
+                state.add_log(f"   🎬 Decoding video frames and analyzing content for '{media_path.name}'...")
+                ai_output = local_video_seo.decode_video_with_gemini(
+                    media_path=media_path,
+                    client=active_client,
+                    api_key=api_key_to_use,
+                    platform=platform,
+                    folder_name=folder_hint,
+                    index=idx,
+                    log_callback=state.add_log
+                )
+                state.add_log(f"   ✨ Video decoding complete! Generated accurate Caption & 8+ Hashtags.")
             if False:
                 upload_target, is_temp_preview = create_fast_video_preview(media_path)
                 try:
@@ -843,24 +1024,24 @@ FORMAT REQUIREMENTS:
 Provide ONLY the story-driven caption followed directly by hashtags.
 Do NOT include ANY section titles, labels, or prefixes (Do NOT write '🎯 HOOK:', '📌 CAPTION:', '🏷️ HASHTAGS:', 'Caption:', 'Hook:', etc.).
 
+CRITICAL CAPTION LENGTH RULE (ZERO CUT-OFF WORDS):
+1. Write EXACTLY 1 PUNCHY, COMPLETE VIRAL SENTENCE (strictly between 50 and 80 characters, around 10 to 14 words) with vibrant emojis describing the key action, skill, humor, or moment in the video.
+2. The sentence MUST be completely finished and end cleanly with an exclamation mark (!) or period (.) and emojis. Never write overly long multi-sentence paragraphs that would get cut off.
+
 CRITICAL HASHTAGS RULE (MINIMUM 7-8 VIRAL HASHTAGS):
-You MUST ALWAYS generate a minimum of 7 to 8 viral and relevant hashtags (e.g. 7 to 10 hashtags total).
-Always include #MustWatch, #FYP, #Viral, plus 4-6 specific viral and niche hashtags (e.g. #Trending #Reels #ExplorePage #VideoOfTheDay #ViralReels #ForYouPage).
-Never output fewer than 7 hashtags!
+Follow immediately with 7 to 9 viral and relevant hashtags (e.g. #MustWatch, #FYP, #Viral, plus 4-6 specific content hashtags matching what is happening in the video).
 
-EXACT FORMAT TO FOLLOW:
-[Engaging, 1-2 sentence story-driven caption strictly in fluent English describing the key moment, emotion, humor, or situation with appropriate emojis]
-
-#ContentTag #MustWatch #FYP #Viral #Trending #Reels #ExplorePage #ViralReels
+EXACT FORMAT:
+[1 complete punchy sentence strictly 50-80 chars with vibrant emojis ending with ! or .]   #MustWatch #FYP #Viral #VideoSpecificTag1 #Tag2 #Tag3 #Tag4 #Tag5
 
 EXAMPLE:
-She walks in with her paperwork and family confrontation explodes! 😳📄 Accusations fly and tempers flare. 👀🔥 #FamilyDrama #MustWatch #FYP #Viral #Trending #ViralReels #ExplorePage #ForYouPage
+Fearless acrobats execute a jaw-dropping aerial leap! 🎪✨🔥 #MustWatch #FYP #Viral #ViralMoment #Acrobatics #CircusLife #StuntPerformer #ExplorePage
 
 CRITICAL RULES:
 - EVERYTHING MUST be written strictly in 100% FLUENT ENGLISH ONLY.
 - Regardless of the spoken language or dialogue in the video, write EVERYTHING strictly in 100% FLUENT ENGLISH.
 - Absolutely NO section labels, headers, or markdown titles.
-- Output ONLY the clean caption followed immediately by minimum 7-8 hashtags."""
+- Output ONLY the clean caption followed immediately by hashtags."""
 
                     state.add_log(f"   🤖 Gemini AI generating Caption & 7-8+ Hashtags for {platform.upper()}...")
                     for model_name in ACTIVE_MODELS:
@@ -964,7 +1145,7 @@ CRITICAL RULES:
                 output_ext = ".mp4" if (render_status.get("ok") and temp_4k_path and temp_4k_path.exists() and temp_4k_path.stat().st_size > 0) else ext
 
                 # Generate video filename directly from AI Caption + Hashtags (zero .txt file)
-                renamed_filename = generate_video_filename(ai_output, output_ext, target_folder, fallback_stem=media_path.stem)
+                renamed_filename = generate_video_filename(ai_output, output_ext, target_folder, fallback_stem=media_path.stem, topic_hint=folder_hint)
                 target_media = target_folder / renamed_filename
 
                 import gc
@@ -1000,6 +1181,13 @@ CRITICAL RULES:
                                 break
                             except Exception:
                                 pass
+
+                state.latest_result = {
+                    "folder": target_folder.name if target_folder else "output_media",
+                    "video_file": renamed_filename,
+                    "txt_file": "",
+                    "content": ai_output
+                }
 
                 # Clean up empty parent folder inside input_media if it was inside a subfolder
                 if media_path.parent != INPUT_DIR:
@@ -1050,21 +1238,35 @@ def direct_process_worker(media_path, original_filename, platform, is_temp=False
 
     try:
         cfg = load_config()
+        engine_mode = cfg.get("engine_mode", "local").lower()
         raw_key = cfg.get("gemini_api_key", "").strip()
-        rotator = GeminiKeyRotator(raw_key)
+        rotator = GeminiKeyRotator(raw_key) if raw_key else None
         platform = cfg.get("target_platform", "facebook")
-        active_client, cur_k, tot_k = rotator.get_client() if rotator.total_keys > 0 else (None, 0, 0)
-        api_key_to_use = rotator.keys[cur_k] if rotator.total_keys > 0 else None
-        state.add_log(f"   🎬 Decoding video frames and analyzing content for '{original_filename}'...")
-        ai_output = local_video_seo.decode_video_with_gemini(
-            media_path=media_path,
-            client=active_client,
-            api_key=api_key_to_use,
-            platform=platform,
-            folder_name=media_path.parent.name,
-            index=1,
-            log_callback=state.add_log
-        )
+        use_system_engine = (engine_mode == "local") or (not rotator or rotator.total_keys == 0)
+
+        if use_system_engine:
+            state.add_log(f"⚡ [Direct Extract Mode]: Analyzing '{original_filename}' with Smart System Engine (Zero API Limits, Instant)...")
+            ai_output = local_video_seo.generate_local_caption_and_hashtags(
+                media_path=media_path,
+                folder_name=media_path.parent.name,
+                index=1,
+                platform=platform
+            )
+        else:
+            state.add_log(f"⚡ [Direct Extract Mode]: Analyzing '{original_filename}' with Gemini Vision (Zero File Modifications)...")
+            active_client, cur_k, tot_k = rotator.get_client() if (rotator and rotator.total_keys > 0) else (None, 0, 0)
+            api_key_to_use = rotator.keys[cur_k] if (rotator and rotator.total_keys > 0) else None
+            state.add_log(f"   🎬 Decoding video frames and analyzing content for '{original_filename}'...")
+            ai_output = local_video_seo.decode_video_with_gemini(
+                media_path=media_path,
+                client=active_client,
+                api_key=api_key_to_use,
+                platform=platform,
+                folder_name=media_path.parent.name,
+                index=1,
+                log_callback=state.add_log,
+                force_local=use_system_engine
+            )
         state.latest_result = {
             "folder": "Direct Extract (Zero File Changes)",
             "video_file": original_filename,

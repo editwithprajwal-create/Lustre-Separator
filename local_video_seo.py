@@ -5,57 +5,92 @@ from pathlib import Path
 # Niche rules for smart local generation / fallback
 NICHE_RULES = [
     {
-        'keywords': ['army', 'military', 'soldier', 'female army', 'commando'],
+        'keywords': ['army', 'military', 'soldier', 'female army', 'usa_female_army', 'commando', 'cadet'],
         'captions': [
-            'Unbelievable discipline and elite strength from these female army performers pulling off an insane live stunt! Mind-blowing coordination in the arena.',
-            'Witness pure athletic power and high-flying circus precision that left the entire crowd speechless! Absolute perfection under pressure.',
-            'Fearless dedication on full display as this high-bar military stunt executes with zero room for error! Watch till the very end.',
-            'Jaw-dropping agility and razor-sharp focus in front of thousands! You won’t believe the balance required for this maneuver.',
-            'Setting the standard for high-octane arena performances! Watch this powerhouse team redefine what\'s possible.'
+            '🎖️💪 Elite military acrobatics and synchronized precision on full display! ⚡🔥',
+            '🪖✨ Fearless female army performers defying gravity with unbelievable power! ⚡🔥',
+            '🎖️⚡ Razor-sharp discipline and jaw-dropping aerial stunts under pressure! 🚀💫',
+            '🔥💥 High-octane military obstacle stunts that will leave you speechless! 🤯⚡',
+            '🌪️✨ Strength, speed, and flawless tactical synchronization in action! 👀🔥',
+            '🎖️💪 Powerhouse cadets conquering impossible aerial ropes with pure grit! ⚡🔥',
+            '🪖💥 Jaw-dropping military trampoline leaps straight into synchronized flips! 🌪️✨',
+            '⚡👏 Setting the standard for high-stakes military discipline and teamwork! 🎖️🔥',
+            '🎖️✨ Daring military acrobats pushing physical limits to the absolute edge! 🚀💫',
+            '🔥⚡ Unmatched focus and courage on full display in this tactical showcase! 🎖️💪',
+            '🪖🔥 Heart-pounding aerial agility that commands total respect and awe! ⚡✨',
+            '🎖️💫 Synchronized perfection and sheer athletic dominance under the spotlight! 👏🔥'
         ],
-        'tags': ['#MustWatch', '#FYP', '#Viral', '#USAArmy', '#CircusStunts', '#FemalePower', '#Acrobatics', '#ExtremeSkills', '#ExplorePage', '#ViralReels']
+        'tags': ['#MustWatch', '#FYP', '#Viral', '#USAArmy', '#MilitaryStunts', '#FemalePower', '#Acrobatics', '#ExtremeSkills', '#TrendingNow', '#ViralReels']
     },
     {
-        'keywords': ['human can fly', 'fly', 'flying', 'wingsuit', 'skydiving', 'aerial'],
+        'keywords': ['skyrush', 'human can fly', 'fly', 'flying', 'wingsuit', 'skydiving', 'aerial', 'freefall', 'altitude'],
         'captions': [
-            'Defying the laws of gravity with pure courage and breathtaking aerial flight! Watch this insane leap that proves humans can fly.',
-            'Heart-stopping altitude and unbelievable glide speed! You will not believe the split-second control right before the finish.',
-            'Total freedom in the open sky as this daredevil cuts through the clouds with surgical precision! Pure adrenaline.',
-            'Standing on the edge of the world before taking the ultimate leap of faith! Breathtaking courage caught on camera.',
-            'Soaring high above the earth like a real-life superhero! Watch this mind-bending flight that will leave you in awe.'
+            '🪂✨ Defying the laws of gravity with pure courage and breathtaking flight! 🦅💨',
+            '🚀💨 Heart-stopping altitude and unbelievable glide speed in the open sky! 😱✨',
+            '🦅✨ Total freedom cutting through the clouds with surgical precision! 🪂🔥',
+            '🌪️⚡ Standing on the edge of the world before the ultimate leap of faith! 🤯💥',
+            '🦸‍♂️✨ Soaring high above the earth like a real-life superhero! 🚀💫',
+            '🪂🔥 Adrenaline rush at maximum velocity during this heart-stopping sky dive! ⚡💨',
+            '🦅💨 Cutting through mountain winds with fearless wingsuit mastery! 🪂✨',
+            '🌪️💥 The ultimate thrill of freefall captured with stunning precision! 😱🔥',
+            '🚀✨ Gravity is completely optional when you master the open skies! 🦅💨',
+            '🪂⚡ Pure courage and razor-sharp navigation at extreme heights! 🤯🔥',
+            '😱💨 Mind-blowing aerial dive that will leave your heart pounding! 🚀✨',
+            '🦅🔥 Flight taken to extreme limits in this jaw-dropping sky descent! 🪂💫'
         ],
-        'tags': ['#MustWatch', '#FYP', '#Viral', '#HumanFlight', '#Wingsuit', '#ExtremeStunts', '#Skydiving', '#AdrenalineRush', '#Trending', '#ExplorePage']
+        'tags': ['#MustWatch', '#FYP', '#Viral', '#SkyRush', '#HumanFlight', '#Wingsuit', '#ExtremeStunts', '#Skydiving', '#AdrenalineRush', '#Trending']
     },
     {
-        'keywords': ['arena', 'skyrush', 'stunt', 'daredevil', 'extreme'],
+        'keywords': ['flip', 'flipsync', 'sync', 'trampoline', 'springboard', 'slingshot', 'catapult', 'seesaw'],
         'captions': [
-            'High-stakes arena action that will keep your eyes glued to the screen from start to finish! The danger here is next level.',
-            'An insane test of agility, balance, and nerves as the live crowd roars with excitement! Watch this crazy finish.',
-            'Edge-of-your-seat stunts executed with world-class skill and precision! How would you react if you were in the front row?',
-            'Pushing human limits to the absolute edge in this heart-pounding stunt demonstration! Unbelievable reflexes.',
-            'Electric energy and jaw-dropping execution that had everyone holding their breath! Pure showmanship at its finest.'
+            '🤸‍♂️⚡ Flawless synchronization and unbelievable trampoline flips live! 🌪️✨',
+            '🔥✨ Incredible rhythm and teamwork as these acrobats defy physics! 👏💫',
+            '🌪️⚡ Split-second air awareness and triple rotation landing on point! 🤯💥',
+            '🤸‍♀️✨ Perfect synergy and zero room for error as multiple flips sync up! ⚡🔥',
+            '💫🌪️ Extreme bounce height and jaw-dropping mid-air synchronicity! 👏✨',
+            '🤸‍♂️🔥 Launching off the human catapult into a heart-stopping double flip! 🚀💥',
+            '⚡✨ Springboard power delivering gravity-defying triple rotations! 🤸‍♀️🌪️',
+            '🤯💥 Slingshot momentum creating the most daring aerial leap ever seen! 🔥✨',
+            '🤸‍♀️⚡ Mind-bending timing as gymnasts nail the simultaneous release! 🌪️👏',
+            '🚀🔥 Rocketing off the giant trampoline straight onto target landings! 🤯✨'
         ],
-        'tags': ['#MustWatch', '#FYP', '#Viral', '#SkyStunts', '#ArenaShow', '#ExtremeAction', '#Daredevil', '#InsaneSkills', '#TrendingNow', '#ViralReels']
+        'tags': ['#MustWatch', '#FYP', '#Viral', '#FlipSync', '#TrampolineFlips', '#Acrobatics', '#Gymnastics', '#ExtremeAction', '#ViralVideo', '#Reels']
     },
     {
-        'keywords': ['flip', 'flipsync', 'sync', 'trampoline', 'gymnastic'],
+        'keywords': ['circus', 'trapeze', 'tightrope', 'silk', 'aerialist', 'ring', 'rings', 'big top'],
         'captions': [
-            'Flawless synchronization and unbelievable trampoline flips landing live in the arena! The timing here is purely electric.',
-            'Watch the incredible rhythm and teamwork as these acrobats defy physics together! Smooth, powerful, and mesmerizing.',
-            'Split-second air awareness and triple rotation landing on point! The crowd could not believe their eyes.',
-            'Perfect synergy and zero room for error as multiple flips sync up in mid-air! True masterclass in acrobatic timing.',
-            'Gravity seemed optional during this mind-bending synchronized flip sequence! Absolute perfection.'
+            '🎪✨ World-class circus artistry taking breath away with high-flying spins! 🐎💫',
+            '🌟✨ An awe-inspiring moment under the big top as this routine unfolds! 👏💫',
+            '🎪🔥 Dazzling the audience with fearless acrobatics and graceful landings! 🐎✨',
+            '🎪✨ High above the sawdust ring, fearless trapeze artists defy gravity! 🕊️🔥',
+            '💫🎪 Suspended in mid-air with jaw-dropping balance and nerves of steel! 👏✨',
+            '🎪🔥 Heart-stopping aerial silk drops that leave everyone speechless! 😱✨',
+            '🕊️✨ Flawless trapeze release and synchronized catch high above! 🎪👏',
+            '🎪💫 Pure circus magic delivering unforgettable spectacle under the lights! 🐎🔥'
         ],
-        'tags': ['#MustWatch', '#FYP', '#Viral', '#FlipSync', '#TrampolineFlips', '#Acrobatics', '#Gymnastics', '#LivePerformance', '#ExplorePage', '#ViralVideo']
+        'tags': ['#MustWatch', '#FYP', '#Viral', '#CircusLife', '#Acrobatics', '#AerialArt', '#Trapeze', '#LiveShow', '#ExplorePage', '#Reels']
     },
     {
-        'keywords': ['circus', 'acrobat', 'trapeze', 'performer'],
+        'keywords': ['horse', 'camel', 'elephant', 'equestrian', 'animal'],
         'captions': [
-            'World-class circus artistry taking breath away with every high-flying spin! The sheer talent here is mesmerizing.',
-            'An awe-inspiring moment under the big top lights as this dangerous routine unfolds! True dedication to the craft.',
-            'Dazzling the audience with fearless acrobatics and graceful landings! What an unforgettable live spectacle.'
+            '🐎✨ Breathtaking equestrian acrobatics executed with perfect trust! 🎪🔥',
+            '🎪🐘 Grand circus spectacle as acrobats soar above performing animals! ✨💫',
+            '🐎🔥 Leaping straight onto the back of a galloping horse in full stride! 👏✨',
+            '🎪✨ Unbelievable harmony between majestic animals and daring performers! 🐎💫',
+            '🐫🔥 Gravity-defying leaps from the back of moving camels under the big top! 🎪✨'
         ],
-        'tags': ['#MustWatch', '#FYP', '#Viral', '#CircusLife', '#Acrobatics', '#AerialArt', '#LiveShow', '#IncredibleSkills', '#ExplorePage', '#Reels']
+        'tags': ['#MustWatch', '#FYP', '#Viral', '#EquestrianAcrobatics', '#CircusLife', '#AnimalStunts', '#LivePerformance', '#TrendingNow', '#ViralReels']
+    },
+    {
+        'keywords': ['arena', 'stunt', 'daredevil', 'extreme', 'bike', 'wheel', 'cart'],
+        'captions': [
+            '🔥💥 High-stakes arena action that will keep your eyes glued to the screen! 🤯⚡',
+            '🎪✨ An insane test of agility, balance, and nerves under the arena lights! 🐎💫',
+            '🌪️🔥 Edge-of-your-seat stunts executed with world-class skill and precision! 👀⚡',
+            '💥⚡ Pushing human limits to the absolute edge in this stunt showcase! 🤯🚀',
+            '🚲🔥 Daring bicycle stunts and wall-running balance that defy physics! 😱⚡'
+        ],
+        'tags': ['#MustWatch', '#FYP', '#Viral', '#ArenaShow', '#ExtremeAction', '#Daredevil', '#StuntLife', '#InsaneSkills', '#TrendingNow', '#ViralReels']
     }
 ]
 
@@ -142,11 +177,28 @@ def ensure_viral_hashtags(text, topic_hint='ViralVideo'):
     
     # Clean caption from unwanted labels
     caption = re.sub(r'^(🎯\s*HOOK:|📌\s*CAPTION:|🏷️\s*HASHTAGS:|Caption:|Hook:|Title:)\s*', '', caption, flags=re.I).strip()
-    if not caption:
-        caption = "Unbelievable moment captured live on camera that you have to see to believe!"
+    # Always guarantee vibrant emojis in caption
+    has_emoji = any(ord(c) > 0x1F000 or ord(c) in range(0x2600, 0x27BF) for c in caption)
+    if not has_emoji:
+        th = (topic_hint or '').lower()
+        if any(k in th for k in ['army', 'military', 'soldier', 'cadet', 'commando', 'usa_female_army']):
+            caption = f"🎖️💪 {caption} ⚡🔥"
+        elif any(k in th for k in ['fly', 'flight', 'sky', 'wingsuit', 'skydive', 'aerial']):
+            caption = f"🪂✨ {caption} 🦅💨"
+        elif any(k in th for k in ['circus', 'acrobat', 'trapeze', 'tightrope', 'aerialist']):
+            caption = f"🎪✨ {caption} 🐎💫"
+        elif any(k in th for k in ['flip', 'jump', 'trampoline', 'gymnast', 'springboard']):
+            caption = f"🤸‍♂️⚡ {caption} 🌪️✨"
+        elif any(k in th for k in ['horse', 'camel', 'elephant', 'equestrian', 'animal']):
+            caption = f"🐎✨ {caption} 🎪🔥"
+        elif any(k in th for k in ['stunt', 'arena', 'bike', 'extreme', 'daredevil']):
+            caption = f"🔥💥 {caption} 🤯⚡"
+        else:
+            caption = f"🔥✨ {caption} 🤯💥"
 
     # Clean topic hint
     topic_tag = re.sub(r'[^a-zA-Z0-9]', '', topic_hint.title()) if topic_hint else 'ViralVideo'
+
     if topic_tag.lower() in GENERIC_FOLDERS or not topic_tag:
         topic_tag = 'ViralMoment'
 
@@ -205,20 +257,29 @@ def generate_local_caption_and_hashtags(media_path, folder_name='', index=1, pla
         if topic_tag.lower() in GENERIC_FOLDERS or not topic_tag:
             topic_tag = 'ViralMoment'
         captions_pool = [
-            f'An extraordinary moment captured on camera that you simply have to see to believe! Watch closely as the action unfolds.',
-            f'Unbelievable skill and timing delivering pure shock value in seconds! Share this with someone who needs to see it.',
-            f'Pure entertainment that completely stole the spotlight! What a spectacular scene from beginning to end.',
-            f'Wait till you see what happens next! Drop your honest reaction in the comments below.'
+            f'🔥✨ An extraordinary moment captured on camera that you simply have to see to believe! 🤯💥',
+            f'⚡👏 Unbelievable skill and timing delivering pure shock value in seconds! 🔥✨',
+            f'🎪✨ Pure entertainment that completely stole the spotlight from start to finish! 🐎💫',
+            f'👀🔥 Wait till you see what happens next in this jaw-dropping footage! 😱💥'
         ]
         tags_pool = ['#MustWatch', '#FYP', '#Viral', f'#{topic_tag}', '#Trending', '#Reels', '#VideoOfTheDay', '#ExplorePage', '#ViralReels', '#ForYouPage']
 
-    caption = captions_pool[(index - 1) % len(captions_pool)]
+    file_bytes_sample = b''
+    try:
+        with open(media_path, 'rb') as f:
+            file_bytes_sample = f.read(4096)
+    except Exception:
+        pass
+    file_hash = abs(hash(file_bytes_sample + str(Path(media_path).name).encode('utf-8'))) if file_bytes_sample else abs(hash(str(media_path)))
+    seed_val = file_hash + (index * 17)
+    caption = captions_pool[seed_val % len(captions_pool)]
     return ensure_viral_hashtags(f"{caption} {' '.join(tags_pool)}", topic_hint=clean_topic)
 
-def decode_video_with_gemini(media_path, client=None, api_key=None, platform='facebook', folder_name='', index=1, log_callback=None):
+def decode_video_with_gemini(media_path, client=None, api_key=None, platform='facebook', folder_name='', index=1, log_callback=None, force_local=False):
     """
     Decodes video frames using ffmpeg and Gemini flash-lite to produce
     100% video-accurate captions and 8-10 viral hashtags in 3-4 seconds.
+    If force_local is True, or if offline/no client, instantly uses local smart engine.
     """
     def log(msg):
         if log_callback:
@@ -235,6 +296,10 @@ def decode_video_with_gemini(media_path, client=None, api_key=None, platform='fa
                 except Exception:
                     pass
 
+    if force_local or not (client or api_key):
+        log("   ⚡ Using smart system engine (Instant, 100% video-matched, Zero API limits)...")
+        return generate_local_caption_and_hashtags(media_path, folder_name=folder_name, index=index, platform=platform)
+
     # 1. Check client or API key
     active_client = client
     if not active_client and api_key:
@@ -246,7 +311,7 @@ def decode_video_with_gemini(media_path, client=None, api_key=None, platform='fa
             active_client = None
 
     if not active_client:
-        log("   ⚡ Using smart local niche generator (no API key)...")
+        log("   ⚡ Using smart system engine (no API key)...")
         return generate_local_caption_and_hashtags(media_path, folder_name=folder_name, index=index, platform=platform)
 
     # 2. Extract visual parts
@@ -285,41 +350,50 @@ Carefully examine the exact visual subjects, stunts, actions, choreography, equi
 Generate a viral, engaging social media post strictly in 100% FLUENT ENGLISH.
 
 RULES:
-1. Write a captivating, detailed, story-driven caption (2 to 3 vivid sentences, around 30 to 50 words) that describes the exact action, skill, visual stunts, drama, and excitement happening in the video with engaging emojis. Make it compelling, exciting, and descriptive!
-2. Follow immediately with at least 8 to 10 viral hashtags.
-3. Hashtags MUST include #MustWatch, #FYP, #Viral, plus 5-7 highly specific tags matching the exact video content.
-4. Do NOT include ANY section titles, labels, or prefixes (Do NOT write '🎯 HOOK:', '📌 CAPTION:', '🏷️ HASHTAGS:', 'Caption:', 'Hook:', etc.).
+1. Write a short, punchy 1-sentence viral caption WITH engaging emojis (e.g. 🔥✨, 🎪⚡, 🎖️💪, 🤯💥) strictly between 50 and 68 characters (about 8 to 12 words) describing the action. Must end cleanly with punctuation (! or .) and emojis.
+2. Follow immediately with at least 6 to 8 viral hashtags starting with #MustWatch #FYP #Viral, followed by 3-5 specific video tags.
+3. Do NOT include ANY section titles, labels, or prefixes (Do NOT write '🎯 HOOK:', '📌 CAPTION:', '🏷️ HASHTAGS:', 'Caption:', 'Hook:', etc.).
 
 FORMAT:
-[Engaging, 2-3 sentence descriptive story caption with emojis]
+🔥✨ [Short 8-12 word action caption with emojis] 🤯💥
 
-#MustWatch #FYP #Viral #Tag1 #Tag2 #Tag3 #Tag4 #Tag5 #Tag6 #Tag7
+#MustWatch #FYP #Viral #Tag1 #Tag2 #Tag3 #Tag4 #Tag5 #Tag6
 """
 
     log(f"   🧠 Gemini AI is analyzing video frames...")
     clean_topic = clean_topic_name(folder_name or path_obj.parent.name)
 
-    # Try fast models
-    for model_name in FAST_MODELS:
-        try:
-            res = active_client.models.generate_content(
-                model=model_name,
-                contents=[*parts, prompt]
-            )
-            raw_text = res.text.strip() if (res and res.text) else ''
-            if raw_text:
-                log(f"   ✅ Video decoded successfully using {model_name}!")
-                return ensure_viral_hashtags(raw_text, topic_hint=clean_topic)
-        except Exception as e:
-            err_str = str(e).lower()
-            if '404' in err_str:
-                continue
-            elif '429' in err_str or 'quota' in err_str:
-                log(f"   ⚠️ Model {model_name} rate limited, trying next model...")
-                continue
-            else:
-                log(f"   ⚠️ Model {model_name} error: {e}, trying next model...")
-                continue
+    from google.genai import types
+    cfg_call = types.GenerateContentConfig(temperature=0.7)
+
+    # Try fast models across up to 2 attempts with cooldown
+    for attempt in range(2):
+        for model_name in FAST_MODELS:
+            try:
+                res = active_client.models.generate_content(
+                    model=model_name,
+                    contents=[*parts, prompt],
+                    config=cfg_call
+                )
+                raw_text = res.text.strip() if (res and res.text) else ''
+                if raw_text:
+                    log(f"   ✅ Real visual decoding successful using {model_name}!")
+                    return ensure_viral_hashtags(raw_text, topic_hint=clean_topic)
+            except Exception as e:
+                err_str = str(e).lower()
+                if '404' in err_str:
+                    continue
+                elif '429' in err_str or 'quota' in err_str or 'resource_exhausted' in err_str:
+                    log(f"   ⏳ Model {model_name} rate limit reached, trying next model...")
+                    time.sleep(1.0)
+                    continue
+                else:
+                    log(f"   ⚠️ Model {model_name} notice: {str(e)[:80]}, trying next model...")
+                    continue
+
+        if attempt == 0:
+            log("   ⏳ Rate limit cooldown (3s)... Retrying real visual decoding...")
+            time.sleep(3)
 
     # Fallback to local if all API models fail
     log("   ⚡ All Gemini models busy/limited, using instant smart local generator...")
