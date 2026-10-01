@@ -259,13 +259,13 @@ def clean_caption_text(text, max_len=95):
             cleaned += '!'
     return cleaned
 
-def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=154):
+def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=155):
     ext = ext.lower() if ext else ".mp4"
     if not ext.startswith("."):
         ext = "." + ext
 
-    # Strictly enforce 154 character total filename limit
-    MAX_FILE_NAME_TOTAL = 154
+    # Strictly enforce 155 character total filename limit
+    MAX_FILE_NAME_TOTAL = 155
     max_stem_len = MAX_FILE_NAME_TOTAL - len(ext)
 
     # Windows MAX_PATH is 260. VLC 32-bit fails if total path >= 256.
@@ -333,7 +333,7 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
     if not base_name:
         base_name = fallback_stem
 
-    # Hard guarantee: total filename strictly <= 154 characters
+    # Hard guarantee: total filename strictly <= 155 characters
     if len(base_name) + len(ext) > MAX_FILE_NAME_TOTAL:
         parts = base_name.split('   ')
         if len(parts) == 2:
