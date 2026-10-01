@@ -1210,6 +1210,7 @@ class VideoSeparatorGUI:
                 render_thread.join(timeout=300)
 
             ai_output = clean_ai_output(ai_output)
+            self.msg_queue.put(("output", ai_output.strip()))
 
             # Generate video filename directly from AI Caption + Hashtags (zero .txt file)
             output_ext = ".mp4" if (render_status.get("ok") and temp_4k_path and temp_4k_path.exists()) else ext

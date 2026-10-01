@@ -1889,6 +1889,7 @@ class LustreSeparatorApp:
                     render_thread.join(timeout=300)
 
                 ai_output = clean_ai_output(ai_output)
+                self.msg_queue.put(("latest_result", ai_output.strip()))
 
                 if is_direct:
                     self.msg_queue.put(("latest_result", ai_output.strip()))
