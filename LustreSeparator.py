@@ -249,22 +249,25 @@ def clean_caption_text(text, max_len=95):
             cleaned += '!'
     return cleaned
 
-def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=250):
+def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=154):
     ext = ext.lower() if ext else ".mp4"
     if not ext.startswith("."):
         ext = "." + ext
+
+    # Strictly enforce 154 character total filename limit
+    MAX_FILE_NAME_TOTAL = 154
+    max_stem_len = MAX_FILE_NAME_TOTAL - len(ext)
 
     # Windows MAX_PATH is 260. VLC 32-bit fails if total path >= 256.
     # Keep total absolute path strictly <= 238 characters to guarantee 100% VLC compatibility.
     if target_folder:
         try:
             folder_len = len(str(Path(target_folder).resolve()))
+            max_stem_len = min(max_stem_len, 238 - folder_len - len(ext))
         except Exception:
-            folder_len = 75
-    else:
-        folder_len = 75
+            pass
 
-    max_stem_len = max(70, min(165, 238 - folder_len - len(ext)))
+    max_stem_len = max(45, max_stem_len)
 
     # Split hashtags and caption
     raw_tags = re.findall(r'#[A-Za-z0-9_]+', ai_text)
@@ -273,7 +276,7 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
     # Balance caption and hashtags:
     # Minimum 3 viral hashtags (e.g. #MustWatch #FYP #Viral = ~25 chars) + 3 separator spaces
     min_tag_space = 25
-    caption_budget = max(50, max_stem_len - min_tag_space - 3)
+    caption_budget = max(45, min(80, max_stem_len - min_tag_space - 3))
 
     clean_caption = clean_caption_text(caption_raw, max_len=caption_budget)
 
@@ -320,6 +323,21 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
     if not base_name:
         base_name = fallback_stem
 
+    # Hard guarantee: total filename strictly <= 154 characters
+    if len(base_name) + len(ext) > MAX_FILE_NAME_TOTAL:
+        parts = base_name.split('   ')
+        if len(parts) == 2:
+            c_part, t_part = parts[0], parts[1]
+            t_list = t_part.split()
+            while t_list and (len(f"{c_part}   {' '.join(t_list)}") + len(ext) > MAX_FILE_NAME_TOTAL):
+                t_list.pop()
+            if t_list:
+                base_name = f"{c_part}   {' '.join(t_list)}"
+            else:
+                base_name = clean_caption_text(c_part, max_len=MAX_FILE_NAME_TOTAL - len(ext))
+        else:
+            base_name = clean_caption_text(base_name, max_len=MAX_FILE_NAME_TOTAL - len(ext))
+
     candidate_name = f"{base_name}{ext}"
     if target_folder is None:
         return candidate_name
@@ -332,15 +350,15 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
     while True:
         tag = f" ({counter})"
         needed = len(tag)
-        # Drop hashtags cleanly without chopping any tag
+        max_allowed_stem = MAX_FILE_NAME_TOTAL - len(ext) - needed
         curr_tags = list(fitted_tags) if ('fitted_tags' in locals() and fitted_tags) else []
-        while curr_tags and (len(f"{clean_caption}   {' '.join(curr_tags)}") + needed > max_stem_len):
+        while curr_tags and (len(f"{clean_caption}   {' '.join(curr_tags)}") > max_allowed_stem):
             curr_tags.pop()
 
         if curr_tags:
             stem_candidate = f"{clean_caption}   {' '.join(curr_tags)}"
         else:
-            stem_candidate = clean_caption_text(clean_caption, max_len=max_stem_len - needed)
+            stem_candidate = clean_caption_text(clean_caption, max_len=max_allowed_stem)
 
         new_name = f"{stem_candidate}{tag}{ext}"
         if not (tf / new_name).exists():
