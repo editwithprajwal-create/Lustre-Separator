@@ -7,53 +7,53 @@ NICHE_RULES = [
     {
         'keywords': ['army', 'military', 'soldier', 'female army', 'commando'],
         'captions': [
-            'Unbelievable discipline and elite strength from these female army performers pulling off an insane live stunt! Mind-blowing coordination in the arena.',
-            'Witness pure athletic power and high-flying circus precision that left the entire crowd speechless! Absolute perfection under pressure.',
-            'Fearless dedication on full display as this high-bar military stunt executes with zero room for error! Watch till the very end.',
-            'Jaw-dropping agility and razor-sharp focus in front of thousands! You won’t believe the balance required for this maneuver.',
-            'Setting the standard for high-octane arena performances! Watch this powerhouse team redefine what\'s possible.'
+            '🎖️💪 Unbelievable discipline and elite strength from these female army performers! ⚡🔥',
+            '🎪✨ Witness pure athletic power and high-flying precision under pressure! 🐎💫',
+            '🔥💥 Fearless dedication on full display in this high-bar military arena stunt! 🤯⚡',
+            '🌪️✨ Jaw-dropping agility and razor-sharp focus in front of thousands! 👀🔥',
+            '🎖️⚡ Setting the standard for high-octane arena performances! 🚀💫'
         ],
         'tags': ['#MustWatch', '#FYP', '#Viral', '#USAArmy', '#CircusStunts', '#FemalePower', '#Acrobatics', '#ExtremeSkills', '#ExplorePage', '#ViralReels']
     },
     {
         'keywords': ['human can fly', 'fly', 'flying', 'wingsuit', 'skydiving', 'aerial'],
         'captions': [
-            'Defying the laws of gravity with pure courage and breathtaking aerial flight! Watch this insane leap that proves humans can fly.',
-            'Heart-stopping altitude and unbelievable glide speed! You will not believe the split-second control right before the finish.',
-            'Total freedom in the open sky as this daredevil cuts through the clouds with surgical precision! Pure adrenaline.',
-            'Standing on the edge of the world before taking the ultimate leap of faith! Breathtaking courage caught on camera.',
-            'Soaring high above the earth like a real-life superhero! Watch this mind-bending flight that will leave you in awe.'
+            '🪂✨ Defying the laws of gravity with pure courage and breathtaking flight! 🦅💨',
+            '🚀💨 Heart-stopping altitude and unbelievable glide speed in the open sky! 😱✨',
+            '🦅✨ Total freedom cutting through the clouds with surgical precision! 🪂🔥',
+            '🌪️⚡ Standing on the edge of the world before the ultimate leap of faith! 🤯💥',
+            '🦸‍♂️✨ Soaring high above the earth like a real-life superhero! 🚀💫'
         ],
         'tags': ['#MustWatch', '#FYP', '#Viral', '#HumanFlight', '#Wingsuit', '#ExtremeStunts', '#Skydiving', '#AdrenalineRush', '#Trending', '#ExplorePage']
     },
     {
         'keywords': ['arena', 'skyrush', 'stunt', 'daredevil', 'extreme'],
         'captions': [
-            'High-stakes arena action that will keep your eyes glued to the screen from start to finish! The danger here is next level.',
-            'An insane test of agility, balance, and nerves as the live crowd roars with excitement! Watch this crazy finish.',
-            'Edge-of-your-seat stunts executed with world-class skill and precision! How would you react if you were in the front row?',
-            'Pushing human limits to the absolute edge in this heart-pounding stunt demonstration! Unbelievable reflexes.',
-            'Electric energy and jaw-dropping execution that had everyone holding their breath! Pure showmanship at its finest.'
+            '🔥💥 High-stakes arena action that will keep your eyes glued to the screen! 🤯⚡',
+            '🎪✨ An insane test of agility, balance, and nerves under the arena lights! 🐎💫',
+            '🌪️🔥 Edge-of-your-seat stunts executed with world-class skill and precision! 👀⚡',
+            '💥⚡ Pushing human limits to the absolute edge in this stunt showcase! 🤯🚀',
+            '✨🔥 Electric energy and jaw-dropping execution leaving everyone in awe! 👏💫'
         ],
         'tags': ['#MustWatch', '#FYP', '#Viral', '#SkyStunts', '#ArenaShow', '#ExtremeAction', '#Daredevil', '#InsaneSkills', '#TrendingNow', '#ViralReels']
     },
     {
         'keywords': ['flip', 'flipsync', 'sync', 'trampoline', 'gymnastic'],
         'captions': [
-            'Flawless synchronization and unbelievable trampoline flips landing live in the arena! The timing here is purely electric.',
-            'Watch the incredible rhythm and teamwork as these acrobats defy physics together! Smooth, powerful, and mesmerizing.',
-            'Split-second air awareness and triple rotation landing on point! The crowd could not believe their eyes.',
-            'Perfect synergy and zero room for error as multiple flips sync up in mid-air! True masterclass in acrobatic timing.',
-            'Gravity seemed optional during this mind-bending synchronized flip sequence! Absolute perfection.'
+            '🤸‍♂️⚡ Flawless synchronization and unbelievable trampoline flips landing live! 🌪️✨',
+            '🔥✨ Watch the incredible rhythm and teamwork as these acrobats defy physics! 👏💫',
+            '🌪️⚡ Split-second air awareness and triple rotation landing on point! 🤯💥',
+            '🤸‍♀️✨ Perfect synergy and zero room for error as multiple flips sync up! ⚡🔥',
+            '💫🌪️ Gravity seemed optional during this synchronized flip sequence! 👏✨'
         ],
         'tags': ['#MustWatch', '#FYP', '#Viral', '#FlipSync', '#TrampolineFlips', '#Acrobatics', '#Gymnastics', '#LivePerformance', '#ExplorePage', '#ViralVideo']
     },
     {
-        'keywords': ['circus', 'acrobat', 'trapeze', 'performer'],
+        'keywords': ['circus', 'acrobat', 'trapeze', 'performer', 'bike'],
         'captions': [
-            'World-class circus artistry taking breath away with every high-flying spin! The sheer talent here is mesmerizing.',
-            'An awe-inspiring moment under the big top lights as this dangerous routine unfolds! True dedication to the craft.',
-            'Dazzling the audience with fearless acrobatics and graceful landings! What an unforgettable live spectacle.'
+            '🎪✨ World-class circus artistry taking breath away with high-flying spins! 🐎💫',
+            '🌟✨ An awe-inspiring moment under the big top lights as this routine unfolds! 👏💫',
+            '🎪🔥 Dazzling the audience with fearless acrobatics and graceful landings! 🐎✨'
         ],
         'tags': ['#MustWatch', '#FYP', '#Viral', '#CircusLife', '#Acrobatics', '#AerialArt', '#LiveShow', '#IncredibleSkills', '#ExplorePage', '#Reels']
     }
@@ -139,7 +139,22 @@ def ensure_viral_hashtags(text, topic_hint='ViralVideo'):
     # Clean caption from unwanted labels
     caption = re.sub(r'^(🎯\s*HOOK:|📌\s*CAPTION:|🏷️\s*HASHTAGS:|Caption:|Hook:|Title:)\s*', '', caption, flags=re.I).strip()
     if not caption:
-        caption = "Unbelievable moment captured live on camera that you have to see to believe!"
+        caption = "🔥✨ Unbelievable moment captured live on camera that you have to see to believe! 🤯💥"
+
+    # Always guarantee vibrant emojis in caption
+    has_emoji = any(ord(c) > 0x1F000 or ord(c) in range(0x2600, 0x27BF) for c in caption)
+    if not has_emoji:
+        th = (topic_hint or '').lower()
+        if any(k in th for k in ['fly', 'flight', 'sky', 'wingsuit', 'aerial']):
+            caption = f"🪂✨ {caption} 🦅💨"
+        elif any(k in th for k in ['circus', 'acrobat', 'trapeze', 'bike']):
+            caption = f"🎪✨ {caption} 🐎💫"
+        elif any(k in th for k in ['flip', 'jump', 'trampoline']):
+            caption = f"🤸‍♂️⚡ {caption} 🌪️✨"
+        elif any(k in th for k in ['army', 'military', 'soldier']):
+            caption = f"🎖️💪 {caption} ⚡🔥"
+        else:
+            caption = f"🔥✨ {caption} 🤯💥"
 
     # Clean topic hint
     topic_tag = re.sub(r'[^a-zA-Z0-9]', '', topic_hint.title()) if topic_hint else 'ViralVideo'
@@ -201,10 +216,10 @@ def generate_local_caption_and_hashtags(media_path, folder_name='', index=1, pla
         if topic_tag.lower() in GENERIC_FOLDERS or not topic_tag:
             topic_tag = 'ViralMoment'
         captions_pool = [
-            f'An extraordinary moment captured on camera that you simply have to see to believe! Watch closely as the action unfolds.',
-            f'Unbelievable skill and timing delivering pure shock value in seconds! Share this with someone who needs to see it.',
-            f'Pure entertainment that completely stole the spotlight! What a spectacular scene from beginning to end.',
-            f'Wait till you see what happens next! Drop your honest reaction in the comments below.'
+            f'🔥✨ An extraordinary moment captured on camera that you simply have to see to believe! 🤯💥',
+            f'⚡👏 Unbelievable skill and timing delivering pure shock value in seconds! 🔥✨',
+            f'🎪✨ Pure entertainment that completely stole the spotlight from start to finish! 🐎💫',
+            f'👀🔥 Wait till you see what happens next in this jaw-dropping footage! 😱💥'
         ]
         tags_pool = ['#MustWatch', '#FYP', '#Viral', f'#{topic_tag}', '#Trending', '#Reels', '#VideoOfTheDay', '#ExplorePage', '#ViralReels', '#ForYouPage']
 
