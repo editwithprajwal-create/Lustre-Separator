@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import os, sys, re, time, random, shutil, subprocess
+import os, sys, re, time, random, shutil, subprocess, json
 from pathlib import Path
 
 # Niche rules for smart local generation / fallback
@@ -95,13 +95,10 @@ NICHE_RULES = [
 ]
 
 FAST_MODELS = [
-    'gemini-3.1-flash-lite',
+    'gemini-flash-lite-latest',
     'gemini-3.1-flash-lite-preview',
-    'gemini-3.5-flash',
     'gemini-3-flash-preview',
-    'gemini-3.6-flash',
-    'gemini-3.7-flash',
-    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
     'gemini-flash-latest'
 ]
 
@@ -267,11 +264,12 @@ def generate_local_caption_and_hashtags(media_path, folder_name='', index=1, pla
     caption = captions_pool[seed_val % len(captions_pool)]
     return ensure_viral_hashtags(f"{caption} {' '.join(tags_pool)}", topic_hint=clean_topic)
 
-def decode_video_with_gemini(media_path, client=None, api_key=None, platform='facebook', folder_name='', index=1, log_callback=None, force_local=False):
+def decode_video_with_gemini(media_path, client=None, api_key=None, keys=None, platform='facebook', folder_name='', index=1, log_callback=None, force_local=False):
     """
-    Decodes video frames using ffmpeg and Gemini flash-lite to produce
-    100% video-accurate captions and 8-10 viral hashtags in 3-4 seconds.
-    If force_local is True, or if offline/no client, instantly uses local smart engine.
+    Decodes video frames using ffmpeg and Gemini Vision models to produce
+    100% video-accurate captions and exactly 5 hashtags (#MustWatch #FYP #Reels + 2 content tags).
+    Rotates automatically through all available API keys with smart cooldown,
+    NEVER falling back to generic duplicate local templates.
     """
     def log(msg):
         if log_callback:
@@ -288,25 +286,34 @@ def decode_video_with_gemini(media_path, client=None, api_key=None, platform='fa
                 except Exception:
                     pass
 
-    if force_local or not (client or api_key):
-        log("   ⚡ Using smart system engine (Instant, 100% video-matched, Zero API limits)...")
-        return generate_local_caption_and_hashtags(media_path, folder_name=folder_name, index=index, platform=platform)
+    # Build full list of API keys
+    key_list = []
+    if keys:
+        if isinstance(keys, list):
+            key_list.extend([k.strip() for k in keys if k and k.strip()])
+        else:
+            key_list.extend([k.strip() for k in re.split(r'[,;\n\r\s]+', str(keys)) if k.strip()])
+    if api_key and api_key not in key_list:
+        key_list.insert(0, api_key.strip())
 
-    # 1. Check client or API key
-    active_client = client
-    if not active_client and api_key:
+    if not key_list:
         try:
-            from google import genai
-            active_client = genai.Client(api_key=api_key)
-        except Exception as e:
-            log(f"   [!] Failed to initialize Gemini Client: {e}")
-            active_client = None
+            cfg_path = Path(__file__).parent / "config.json"
+            if cfg_path.exists():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg_data = json.load(f)
+                    c_keys = cfg_data.get("gemini_api_keys", [])
+                    if not c_keys and cfg_data.get("gemini_api_key"):
+                        c_keys = re.split(r'[,;\n\r\s]+', str(cfg_data["gemini_api_key"]))
+                    key_list = [k.strip() for k in c_keys if k and k.strip()]
+        except Exception:
+            pass
 
-    if not active_client:
-        log("   ⚡ Using smart system engine (no API key)...")
-        return generate_local_caption_and_hashtags(media_path, folder_name=folder_name, index=index, platform=platform)
+    if not key_list and not client:
+        log("   [!] No Gemini API key found. Please add your API key in Settings!")
+        return None
 
-    # 2. Extract visual parts
+    # Extract visual parts (keyframes)
     path_obj = Path(media_path)
     suffix = path_obj.suffix.lower()
     is_video = suffix in ['.mp4', '.mov', '.avi', '.mkv', '.webm']
@@ -316,14 +323,14 @@ def decode_video_with_gemini(media_path, client=None, api_key=None, platform='fa
     try:
         from google.genai import types
         if is_video:
-            log("   🎬 Decoding video frames locally with FFmpeg...")
+            log(f"   🎬 Decoding video frames locally with FFmpeg for '{path_obj.name}'...")
             frames_bytes = extract_video_keyframes(media_path, num_frames=3)
             if frames_bytes:
                 for fb in frames_bytes:
                     parts.append(types.Part.from_bytes(data=fb, mime_type='image/jpeg'))
                 log(f"   👁️ Successfully decoded {len(parts)} keyframes for visual AI analysis!")
             else:
-                log("   ⚠️ Could not extract frames via FFmpeg, falling back to direct analysis...")
+                log("   ⚠️ Could not extract frames via FFmpeg, attempting direct read...")
         elif is_image:
             with open(media_path, 'rb') as f:
                 img_data = f.read()
@@ -332,10 +339,9 @@ def decode_video_with_gemini(media_path, client=None, api_key=None, platform='fa
     except Exception as e:
         log(f"   [!] Error preparing media frames: {e}")
 
-    # If no visual parts extracted, fallback to local
     if not parts:
-        log("   ⚡ Falling back to local niche generator...")
-        return generate_local_caption_and_hashtags(media_path, folder_name=folder_name, index=index, platform=platform)
+        log(f"   ⚠️ Could not extract visual frames from '{path_obj.name}'.")
+        return None
 
     prompt = f"""Analyze these visual frames captured from this {platform.upper()} media clip.
 Carefully examine the exact visual subjects, stunts, actions, choreography, equipment, animals, skills, and atmosphere.
@@ -354,41 +360,47 @@ FORMAT:
 #MustWatch #FYP #Reels #VideoTag1 #VideoTag2
 """
 
-    log(f"   🧠 Gemini AI is analyzing video frames...")
     clean_topic = clean_topic_name(folder_name or path_obj.parent.name)
-
+    from google import genai
     from google.genai import types
     cfg_call = types.GenerateContentConfig(temperature=0.7)
 
-    # Try fast models across up to 2 attempts with cooldown
-    for attempt in range(2):
-        for model_name in FAST_MODELS:
+    # Multi-Key Rotation + Smart Cooldown Wait (Never fall back to duplicate templates)
+    max_rounds = 5
+    for rnd in range(max_rounds):
+        for k_idx, cur_key in enumerate(key_list):
             try:
-                res = active_client.models.generate_content(
-                    model=model_name,
-                    contents=[*parts, prompt],
-                    config=cfg_call
-                )
-                raw_text = res.text.strip() if (res and res.text) else ''
-                if raw_text:
-                    log(f"   ✅ Real visual decoding successful using {model_name}!")
-                    return ensure_viral_hashtags(raw_text, topic_hint=clean_topic)
-            except Exception as e:
-                err_str = str(e).lower()
-                if '404' in err_str:
-                    continue
-                elif '429' in err_str or 'quota' in err_str or 'resource_exhausted' in err_str:
-                    log(f"   ⏳ Model {model_name} rate limit reached, trying next model...")
-                    time.sleep(1.0)
-                    continue
-                else:
-                    log(f"   ⚠️ Model {model_name} notice: {str(e)[:80]}, trying next model...")
-                    continue
+                active_client = genai.Client(api_key=cur_key)
+            except Exception:
+                continue
 
-        if attempt == 0:
-            log("   ⏳ Rate limit cooldown (3s)... Retrying real visual decoding...")
-            time.sleep(3)
+            for model_name in FAST_MODELS:
+                try:
+                    res = active_client.models.generate_content(
+                        model=model_name,
+                        contents=[*parts, prompt],
+                        config=cfg_call
+                    )
+                    raw_text = res.text.strip() if (res and res.text) else ''
+                    if raw_text:
+                        log(f"   ✅ Real visual decoding successful using {model_name} (Key {k_idx+1}/{len(key_list)})!")
+                        return ensure_viral_hashtags(raw_text, topic_hint=clean_topic)
+                except Exception as e:
+                    err_str = str(e).lower()
+                    if '404' in err_str:
+                        continue
+                    elif '429' in err_str or 'quota' in err_str or 'resource_exhausted' in err_str:
+                        log(f"   🔄 Key {k_idx+1}/{len(key_list)} rate limit reached (429). Rotating to next API key...")
+                        break
+                    elif '503' in err_str or 'unavailable' in err_str:
+                        continue
+                    else:
+                        continue
 
-    # Fallback to local if all API models fail
-    log("   ⚡ All Gemini models busy/limited, using instant smart local generator...")
-    return generate_local_caption_and_hashtags(media_path, folder_name=folder_name, index=index, platform=platform)
+        if rnd < max_rounds - 1:
+            cooldown_sec = 4 + (rnd * 3)
+            log(f"   ⏳ All API keys temporarily rate-limited. Cooling down {cooldown_sec}s before retry round {rnd+2}/{max_rounds}...")
+            time.sleep(cooldown_sec)
+
+    log(f"   ⚠️ Could not reach Gemini Vision after {max_rounds} rounds of key rotation.")
+    return None

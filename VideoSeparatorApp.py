@@ -1355,6 +1355,15 @@ class VideoSeparatorGUI:
                 self.log("   ⏳ Finalizing parallel 4K render on GPU...")
                 render_thread.join(timeout=300)
 
+            if not ai_output:
+                self.log(f"   ⚠️ Could not decode '{media_path.name}'. Skipping to prevent incorrect duplicate naming.")
+                if temp_4k_path and temp_4k_path.exists():
+                    try:
+                        temp_4k_path.unlink()
+                    except Exception:
+                        pass
+                continue
+
             ai_output = clean_ai_output(ai_output)
             self.msg_queue.put(("output", ai_output.strip()))
 
