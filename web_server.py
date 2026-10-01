@@ -246,22 +246,16 @@ def split_caption_and_hashtags(text):
     hashtag_str = ' '.join(hashtags)
     return caption_part, hashtag_str
 
-def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=180):
+def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=250):
     ext = ext.lower() if ext else ".mp4"
     if not ext.startswith("."):
         ext = "." + ext
 
-    # Windows MAX_PATH is 260. VLC 32-bit fails if full absolute path >= 256.
-    # Keep total absolute path strictly <= 240 characters to guarantee 100% VLC, Explorer & media player compatibility.
-    if target_folder:
-        try:
-            folder_len = len(str(Path(target_folder).resolve()))
-        except Exception:
-            folder_len = 80
-    else:
-        folder_len = 80
-    safe_max_len = max(60, min(max_len, 235 - folder_len - len(ext) - 1))
+    # 255 characters is Windows NTFS max filename limit.
+    # Leaving room for extension (.mp4 is 4 chars) and potential collision tag ' (1)' (4 chars):
+    max_stem_len = min(max_len, 255 - len(ext))
 
+    # Split hashtags and caption
     hashtags = re.findall(r'#[A-Za-z0-9_]+', ai_text)
     caption_part = re.sub(r'#[A-Za-z0-9_]+', '', ai_text)
     caption_part = re.sub(r'[\r\n\t]+', ' ', caption_part)
@@ -271,32 +265,58 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
     if not caption_part and not hashtags:
         base_name = fallback_stem
     elif not hashtags:
-        base_name = caption_part[:safe_max_len].strip()
-    elif not caption_part:
-        base_name = " ".join(hashtags)[:safe_max_len].strip()
-    else:
-        core_tags = [t for t in hashtags if t.lower() in ['#mustwatch', '#fyp', '#viral']]
-        other_tags = [t for t in hashtags if t not in core_tags]
-        ordered_tags = core_tags + other_tags
-
-        allowed_caption_len = max(55, safe_max_len - 45)
-        if len(caption_part) > allowed_caption_len:
-            trimmed = caption_part[:allowed_caption_len]
+        if len(caption_part) <= max_stem_len:
+            base_name = caption_part
+        else:
+            trimmed = caption_part[:max_stem_len]
             last_sp = trimmed.rfind(' ')
-            caption_part = trimmed[:last_sp].rstrip('. ') if last_sp > 25 else trimmed.rstrip('. ')
-
-        fitted_tags = []
-        for tag in ordered_tags:
-            test_stem = f"{caption_part}   {' '.join(fitted_tags + [tag])}"
-            if len(test_stem) <= safe_max_len:
-                fitted_tags.append(tag)
+            base_name = trimmed[:last_sp].rstrip('. ') if last_sp > 50 else trimmed.rstrip('. ')
+    elif not caption_part:
+        fitted = []
+        for tag in hashtags:
+            test = ' '.join(fitted + [tag])
+            if len(test) <= max_stem_len:
+                fitted.append(tag)
             else:
                 break
-
-        if fitted_tags:
-            base_name = f"{caption_part}   {' '.join(fitted_tags)}"
+        base_name = ' '.join(fitted) if fitted else hashtags[0][:max_stem_len]
+    else:
+        # Both caption and hashtags exist:
+        if len(caption_part) <= max_stem_len:
+            # Full caption fits! Now fit as many complete hashtags as possible
+            space_left = max_stem_len - len(caption_part) - 3  # '   ' separator
+            fitted_tags = []
+            for tag in hashtags:
+                test_str = ' '.join(fitted_tags + [tag])
+                if len(test_str) <= space_left:
+                    fitted_tags.append(tag)
+                else:
+                    break
+            if fitted_tags:
+                base_name = f"{caption_part}   {' '.join(fitted_tags)}"
+            else:
+                base_name = caption_part
         else:
-            base_name = caption_part
+            # Caption itself is longer than 250 characters (very rare)
+            trimmed = caption_part[:max_stem_len]
+            last_p = max(trimmed.rfind('. '), trimmed.rfind('! '), trimmed.rfind('? '))
+            if last_p > int(max_stem_len * 0.6):
+                complete_sentence = trimmed[:last_p + 1].strip()
+                space_left = max_stem_len - len(complete_sentence) - 3
+                fitted_tags = []
+                for tag in hashtags:
+                    test_str = ' '.join(fitted_tags + [tag])
+                    if len(test_str) <= space_left:
+                        fitted_tags.append(tag)
+                    else:
+                        break
+                if fitted_tags:
+                    base_name = f"{complete_sentence}   {' '.join(fitted_tags)}"
+                else:
+                    base_name = complete_sentence
+            else:
+                last_sp = trimmed.rfind(' ')
+                base_name = trimmed[:last_sp].strip().rstrip('. ') if last_sp > 50 else trimmed.rstrip('. ')
 
     base_name = re.sub(r'[<>:"/\\|?*\x00-\x1f\r\n]', '', base_name).strip().rstrip('. ')
     if not base_name:
@@ -313,7 +333,7 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
     counter = 1
     while True:
         tag = f" ({counter})"
-        trimmed_base = base_name[:(max_len - len(tag))].rstrip('. ')
+        trimmed_base = base_name[:(max_stem_len - len(tag))].rstrip('. ')
         new_name = f"{trimmed_base}{tag}{ext}"
         if not (tf / new_name).exists():
             return new_name

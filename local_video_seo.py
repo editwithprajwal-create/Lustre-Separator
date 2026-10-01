@@ -281,13 +281,13 @@ Carefully examine the exact visual subjects, stunts, actions, choreography, equi
 Generate a viral, engaging social media post strictly in 100% FLUENT ENGLISH.
 
 RULES:
-1. Write a captivating, detailed, story-driven caption (2 to 3 vivid sentences, around 30 to 50 words) that describes the exact action, skill, visual stunts, drama, and excitement happening in the video with engaging emojis. Make it compelling, exciting, and descriptive!
+1. Write a captivating, story-driven caption (1 to 2 high-impact sentences, around 20 to 30 words, maximum 140 characters) that describes the exact action, stunts, and excitement in the video with engaging emojis. Make it punchy, complete, and end cleanly with full punctuation (! or .).
 2. Follow immediately with at least 8 to 10 viral hashtags.
 3. Hashtags MUST include #MustWatch, #FYP, #Viral, plus 5-7 highly specific tags matching the exact video content.
 4. Do NOT include ANY section titles, labels, or prefixes (Do NOT write '🎯 HOOK:', '📌 CAPTION:', '🏷️ HASHTAGS:', 'Caption:', 'Hook:', etc.).
 
 FORMAT:
-[Engaging, 2-3 sentence descriptive story caption with emojis]
+[Engaging 1-2 sentence story caption with emojis]
 
 #MustWatch #FYP #Viral #Tag1 #Tag2 #Tag3 #Tag4 #Tag5 #Tag6 #Tag7
 """
