@@ -26,6 +26,7 @@ a = Analysis(
         'threading',
         'auto_updater',
         'web_server',
+        'local_video_seo',
     ],
     hookspath=[],
     hooksconfig={},
