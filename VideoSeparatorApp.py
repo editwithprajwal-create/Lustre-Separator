@@ -189,164 +189,55 @@ def split_caption_and_hashtags(text):
     hashtag_str = ' '.join(hashtags)
     return caption_part, hashtag_str
 
-DANGLING_STOPWORDS = {
-    'a', 'an', 'the', 'and', 'or', 'but', 'for', 'nor', 'on', 'at', 'to', 'from',
-    'by', 'with', 'in', 'of', 'into', 'onto', 'upon', 'about', 'above', 'across',
-    'after', 'against', 'along', 'among', 'around', 'as', 'before', 'behind', 'below',
-    'beneath', 'beside', 'between', 'beyond', 'during', 'inside', 'near', 'off',
-    'outside', 'over', 'through', 'under', 'until', 'up', 'down', 'while', 'so',
-    'that', 'than', 'though', 'although', 'because', 'since', 'unless', 'when',
-    'where', 'which', 'who', 'whom', 'whose', 'why', 'how', 'this', 'that', 'these',
-    'those', 'their', 'his', 'her', 'its', 'my', 'your', 'our', 'is', 'are', 'was',
-    'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
-    'would', 'shall', 'should', 'can', 'could', 'may', 'might', 'must', 'precisely',
-    'pure', 'more', 'just', 'very', 'one', 'two', 'three', 'daring', 'fearless',
-    'perfect', 'high-stakes', 'multi-directional', 'stunning', 'incredible',
-    'unbelievable', 'breathtaking', 'flawless', 'seamless', 'synchronized', 'massive'
-}
-
-def is_finished_sentence(s):
-    s = s.strip()
-    if not s:
-        return False
-    # Strip any trailing emojis, variation selectors, and spaces
-    core = re.sub(r'[\U0001F000-\U0001FAFF\u2600-\u27BF\ufe0f\u200d\s]+$', '', s)
-    if any(core.endswith(p) for p in ['.', '!', '?', '…']):
-        return True
-    last_c = s.rstrip('\ufe0f\u200d\u200b ')[-1] if s.rstrip('\ufe0f\u200d\u200b ') else ''
-    if last_c:
-        return ord(last_c) > 0x1F000 or ord(last_c) in range(0x2600, 0x27BF) or ord(last_c) == 0xFE0F
-    return False
-
-def clean_caption_text(text, max_len=95):
-    """
-    Cleans caption text ensuring it NEVER ends with dangling stop-words,
-    incomplete clauses, or broken 'adi' words. Always ends cleanly with punctuation and emojis.
-    """
-    text = re.sub(r'[<>:"/\\|?*\x00-\x1f\r\n]', ' ', text)
-    text = re.sub(r'\s+', ' ', text).strip()
-    if not text:
-        return ""
-
-    # Extract complete sentences including any trailing emojis
-    sentences = [m.group(0).strip() for m in re.finditer(r'.+?(?:[.!?][\U0001F000-\U0001FAFF\u2600-\u27BF\ufe0f\u200d\s]*|$)', text) if m.group(0).strip()]
-    if sentences and is_finished_sentence(sentences[0]):
-        if len(sentences[0]) <= max_len:
-            chosen = sentences[0]
-            if len(sentences) > 1 and is_finished_sentence(sentences[1]) and len(f"{chosen} {sentences[1]}") <= max_len:
-                chosen = f"{chosen} {sentences[1]}"
-            return chosen
-
-    # If first sentence exceeds max_len or was an incomplete fragment, find clean sub-clause
-    trimmed = text[:max_len]
-    clause_breaks = [trimmed.rfind(', '), trimmed.rfind('; '), trimmed.rfind(' - '), trimmed.rfind(' — ')]
-    best_break = max(clause_breaks)
-
-    if best_break > 35:
-        sub = trimmed[:best_break].strip()
-    else:
-        last_sp = trimmed.rfind(' ')
-        sub = trimmed[:last_sp].strip() if last_sp > 25 else trimmed.strip()
-
-    # Strip any dangling stop-words or hanging adjectives from end
-    words = sub.split()
-    while words and words[-1].lower().rstrip('.,;!?#') in DANGLING_STOPWORDS:
-        words.pop()
-
-    cleaned = ' '.join(words).rstrip('.,;:- ')
-    if cleaned:
-        if not is_finished_sentence(cleaned):
-            cleaned += '!'
-    return cleaned
-
-def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=155):
+def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="video", max_len=154):
     ext = ext.lower() if ext else ".mp4"
     if not ext.startswith("."):
         ext = "." + ext
 
-    # Strictly enforce 155 character total filename limit
-    MAX_FILE_NAME_TOTAL = 155
-    max_stem_len = MAX_FILE_NAME_TOTAL - len(ext)
-
-    # Windows MAX_PATH is 260. VLC 32-bit fails if total path >= 256.
-    # Keep total absolute path strictly <= 238 characters to guarantee 100% VLC compatibility.
+    # Windows MAX_PATH is 260. VLC 32-bit fails if full absolute path >= 256.
+    # Keep total filename strictly <= 154 characters.
+    max_stem = 154 - len(ext)
     if target_folder:
         try:
             folder_len = len(str(Path(target_folder).resolve()))
-            max_stem_len = min(max_stem_len, 238 - folder_len - len(ext))
         except Exception:
-            pass
-
-    max_stem_len = max(45, max_stem_len)
-
-    # Split hashtags and caption
-    raw_tags = re.findall(r'#[A-Za-z0-9_]+', ai_text)
-    caption_raw = re.sub(r'#[A-Za-z0-9_]+', '', ai_text)
-
-    # Balance caption and hashtags:
-    # Minimum 3 viral hashtags (e.g. #MustWatch #FYP #Viral = ~25 chars) + 3 separator spaces
-    min_tag_space = 25
-    caption_budget = max(45, min(80, max_stem_len - min_tag_space - 3))
-
-    clean_caption = clean_caption_text(caption_raw, max_len=caption_budget)
-
-    # Clean and deduplicate hashtags
-    seen = set()
-    valid_tags = []
-    for t in raw_tags:
-        clean_t = '#' + re.sub(r'[^A-Za-z0-9_]', '', t)
-        norm = clean_t.lower()
-        if len(clean_t) > 1 and norm not in seen and norm not in {'#outputmedia', '#output', '#input', '#media'}:
-            seen.add(norm)
-            valid_tags.append(clean_t)
-
-    if not clean_caption and not valid_tags:
-        base_name = fallback_stem
-    elif not valid_tags:
-        base_name = clean_caption
-    elif not clean_caption:
-        fitted = []
-        for t in valid_tags:
-            cand = (' ' if fitted else '').join(fitted + [t])
-            if len(cand) <= max_stem_len:
-                fitted.append(t)
-            else:
-                break
-        base_name = ' '.join(fitted) if fitted else valid_tags[0][:max_stem_len]
+            folder_len = 80
     else:
-        # BOTH CAPTION AND HASHTAGS EXIST: FIT BOTH PERFECTLY WITH ZERO ADI WORDS
-        space_left = max_stem_len - len(clean_caption) - 3  # '   ' separator
-        fitted_tags = []
-        for t in valid_tags:
-            cand = ' '.join(fitted_tags + [t])
-            if len(cand) <= space_left:
-                fitted_tags.append(t)
-            else:
-                break
+        folder_len = 80
+    safe_max_len = max(50, min(max_stem, 240 - folder_len - len(ext) - 1))
+    max_len = min(max_stem, safe_max_len)
 
-        if fitted_tags:
-            base_name = f"{clean_caption}   {' '.join(fitted_tags)}"
+    caption, hashtags = split_caption_and_hashtags(ai_text)
+
+    if not caption and not hashtags:
+        base_name = fallback_stem
+    elif not hashtags:
+        base_name = caption
+    elif not caption:
+        base_name = hashtags
+    else:
+        candidate = f"{caption}   {hashtags}"
+        if len(candidate) <= max_len:
+            base_name = candidate
         else:
-            base_name = clean_caption
+            tag_part = hashtags.strip()
+            avail_caption = max_len - len(tag_part) - 3
+            if avail_caption >= 20:
+                truncated = caption[:avail_caption]
+                last_space = truncated.rfind(' ')
+                if last_space > 15:
+                    caption_part = truncated[:last_space].rstrip('. ')
+                else:
+                    caption_part = truncated.rstrip('. ')
+                base_name = f"{caption_part}   {tag_part}".strip()
+            else:
+                base_name = candidate[:max_len].rstrip('. ')
 
-    base_name = re.sub(r'[<>:"/\\|?*\x00-\x1f\r\n]', '', base_name).strip().rstrip('. ')
+    base_name = re.sub(r'[<>:"/\\|?*\x00-\x1f\u2028\u2029\r\n]', '', base_name).strip().rstrip('. ')
+    if len(base_name) > max_len:
+        base_name = base_name[:max_len].rstrip('. ')
     if not base_name:
         base_name = fallback_stem
-
-    # Hard guarantee: total filename strictly <= 155 characters
-    if len(base_name) + len(ext) > MAX_FILE_NAME_TOTAL:
-        parts = base_name.split('   ')
-        if len(parts) == 2:
-            c_part, t_part = parts[0], parts[1]
-            t_list = t_part.split()
-            while t_list and (len(f"{c_part}   {' '.join(t_list)}") + len(ext) > MAX_FILE_NAME_TOTAL):
-                t_list.pop()
-            if t_list:
-                base_name = f"{c_part}   {' '.join(t_list)}"
-            else:
-                base_name = clean_caption_text(c_part, max_len=MAX_FILE_NAME_TOTAL - len(ext))
-        else:
-            base_name = clean_caption_text(base_name, max_len=MAX_FILE_NAME_TOTAL - len(ext))
 
     candidate_name = f"{base_name}{ext}"
     if target_folder is None:
@@ -359,18 +250,8 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
     counter = 1
     while True:
         tag = f" ({counter})"
-        needed = len(tag)
-        max_allowed_stem = MAX_FILE_NAME_TOTAL - len(ext) - needed
-        curr_tags = list(fitted_tags) if ('fitted_tags' in locals() and fitted_tags) else []
-        while curr_tags and (len(f"{clean_caption}   {' '.join(curr_tags)}") > max_allowed_stem):
-            curr_tags.pop()
-
-        if curr_tags:
-            stem_candidate = f"{clean_caption}   {' '.join(curr_tags)}"
-        else:
-            stem_candidate = clean_caption_text(clean_caption, max_len=max_allowed_stem)
-
-        new_name = f"{stem_candidate}{tag}{ext}"
+        trimmed_base = base_name[:(max_len - len(tag))].rstrip('. ')
+        new_name = f"{trimmed_base}{tag}{ext}"
         if not (tf / new_name).exists():
             return new_name
         counter += 1
@@ -1316,8 +1197,7 @@ class VideoSeparatorGUI:
                 platform=platform,
                 folder_name=folder_hint,
                 index=i,
-                log_callback=self.log,
-                force_local=(engine_mode == "local")
+                log_callback=self.log
             )
 
             if self.stop_requested:
