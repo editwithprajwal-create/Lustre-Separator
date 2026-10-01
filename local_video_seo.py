@@ -95,10 +95,12 @@ NICHE_RULES = [
 ]
 
 FAST_MODELS = [
-    'gemini-flash-lite-latest',
-    'gemini-flash-latest',
+    'gemini-3.5-flash',
+    'gemini-3-flash-preview',
+    'gemini-3.6-flash',
+    'gemini-3.7-flash',
     'gemini-3.5-flash-lite',
-    'gemini-3.1-flash-lite'
+    'gemini-flash-latest'
 ]
 
 GENERIC_FOLDERS = {
@@ -258,7 +260,14 @@ def generate_local_caption_and_hashtags(media_path, folder_name='', index=1, pla
         ]
         tags_pool = ['#MustWatch', '#FYP', '#Viral', f'#{topic_tag}', '#Trending', '#Reels', '#VideoOfTheDay', '#ExplorePage', '#ViralReels', '#ForYouPage']
 
-    seed_val = abs(hash(f"{file_stem}_{clean_topic}")) + index * 7
+    file_bytes_sample = b''
+    try:
+        with open(media_path, 'rb') as f:
+            file_bytes_sample = f.read(4096)
+    except Exception:
+        pass
+    file_hash = abs(hash(file_bytes_sample + str(Path(media_path).name).encode('utf-8'))) if file_bytes_sample else abs(hash(str(media_path)))
+    seed_val = file_hash + (index * 17)
     caption = captions_pool[seed_val % len(captions_pool)]
     return ensure_viral_hashtags(f"{caption} {' '.join(tags_pool)}", topic_hint=clean_topic)
 
@@ -351,27 +360,37 @@ FORMAT:
     log(f"   🧠 Gemini AI is analyzing video frames...")
     clean_topic = clean_topic_name(folder_name or path_obj.parent.name)
 
-    # Try fast models
-    for model_name in FAST_MODELS:
-        try:
-            res = active_client.models.generate_content(
-                model=model_name,
-                contents=[*parts, prompt]
-            )
-            raw_text = res.text.strip() if (res and res.text) else ''
-            if raw_text:
-                log(f"   ✅ Video decoded successfully using {model_name}!")
-                return ensure_viral_hashtags(raw_text, topic_hint=clean_topic)
-        except Exception as e:
-            err_str = str(e).lower()
-            if '404' in err_str:
-                continue
-            elif '429' in err_str or 'quota' in err_str:
-                log(f"   ⚠️ Model {model_name} rate limited, trying next model...")
-                continue
-            else:
-                log(f"   ⚠️ Model {model_name} error: {e}, trying next model...")
-                continue
+    from google.genai import types
+    cfg_call = types.GenerateContentConfig(temperature=0.7)
+
+    # Try fast models across up to 2 attempts with cooldown
+    for attempt in range(2):
+        for model_name in FAST_MODELS:
+            try:
+                res = active_client.models.generate_content(
+                    model=model_name,
+                    contents=[*parts, prompt],
+                    config=cfg_call
+                )
+                raw_text = res.text.strip() if (res and res.text) else ''
+                if raw_text:
+                    log(f"   ✅ Real visual decoding successful using {model_name}!")
+                    return ensure_viral_hashtags(raw_text, topic_hint=clean_topic)
+            except Exception as e:
+                err_str = str(e).lower()
+                if '404' in err_str:
+                    continue
+                elif '429' in err_str or 'quota' in err_str or 'resource_exhausted' in err_str:
+                    log(f"   ⏳ Model {model_name} rate limit reached, trying next model...")
+                    time.sleep(1.0)
+                    continue
+                else:
+                    log(f"   ⚠️ Model {model_name} notice: {str(e)[:80]}, trying next model...")
+                    continue
+
+        if attempt == 0:
+            log("   ⏳ Rate limit cooldown (3s)... Retrying real visual decoding...")
+            time.sleep(3)
 
     # Fallback to local if all API models fail
     log("   ⚡ All Gemini models busy/limited, using instant smart local generator...")
