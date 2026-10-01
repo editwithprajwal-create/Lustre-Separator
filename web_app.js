@@ -52,7 +52,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnOpenSettings = document.getElementById('btnOpenSettings');
     const btnCloseSettings = document.getElementById('btnCloseSettings');
     const settingsModal = document.getElementById('settingsModal');
-    const inputApiKey = document.getElementById('inputApiKey');
+    const inputNewApiKey = document.getElementById('inputNewApiKey');
+    const btnAddApiKey = document.getElementById('btnAddApiKey');
+    const apiKeysList = document.getElementById('apiKeysList');
+    const badgeKeysActive = document.getElementById('badgeKeysActive');
+    const keysCountLabel = document.getElementById('keysCountLabel');
+    const btnToggleBulkKeys = document.getElementById('btnToggleBulkKeys');
+    const bulkKeysBody = document.getElementById('bulkKeysBody');
+    const bulkChevron = document.getElementById('bulkChevron');
+    const inputBulkApiKeys = document.getElementById('inputBulkApiKeys');
+    const btnApplyBulkKeys = document.getElementById('btnApplyBulkKeys');
     const btnSaveApiKey = document.getElementById('btnSaveApiKey');
 
     // Studio Pro Menu Elements
@@ -773,7 +782,165 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Settings Modal
+    // Multi-API Key Pool State
+    let activeApiKeys = [];
+    let revealedKeys = new Set();
+
+    function renderApiKeysList() {
+        if (!apiKeysList) return;
+        apiKeysList.innerHTML = '';
+
+        if (keysCountLabel) {
+            keysCountLabel.textContent = `${activeApiKeys.length} ${activeApiKeys.length === 1 ? 'Key' : 'Keys'} Active`;
+        }
+        if (badgeKeysActive) {
+            badgeKeysActive.style.background = activeApiKeys.length > 0 ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)';
+            badgeKeysActive.style.borderColor = activeApiKeys.length > 0 ? 'rgba(34, 197, 94, 0.35)' : 'rgba(239, 68, 68, 0.35)';
+            badgeKeysActive.style.color = activeApiKeys.length > 0 ? '#4ade80' : '#f87171';
+        }
+
+        if (inputBulkApiKeys) {
+            inputBulkApiKeys.value = activeApiKeys.join('\n');
+        }
+
+        if (activeApiKeys.length === 0) {
+            apiKeysList.innerHTML = `
+                <div class="keys-empty-placeholder">
+                    <i class="fa-solid fa-triangle-exclamation" style="color:#eab308; margin-bottom:6px; font-size:16px; display:block;"></i>
+                    No API keys in pool. Paste a Gemini key above and click <strong>Add Key</strong>.
+                </div>
+            `;
+            return;
+        }
+
+        activeApiKeys.forEach((key, idx) => {
+            const isRevealed = revealedKeys.has(idx);
+            let displayKey = key;
+            if (!isRevealed && key.length > 14) {
+                displayKey = key.slice(0, 8) + '••••••••••••' + key.slice(-6);
+            }
+
+            const item = document.createElement('div');
+            item.className = 'api-key-item';
+            item.innerHTML = `
+                <div class="key-item-left">
+                    <span class="key-index-badge">#${idx + 1}</span>
+                    <span class="key-text-preview" title="${key}">${displayKey}</span>
+                </div>
+                <div class="key-item-actions">
+                    <button type="button" class="btn-key-action toggle-eye" data-index="${idx}" title="${isRevealed ? 'Hide' : 'Reveal'} Key">
+                        <i class="fa-solid ${isRevealed ? 'fa-eye-slash' : 'fa-eye'}"></i>
+                    </button>
+                    <button type="button" class="btn-key-action copy-key" data-index="${idx}" title="Copy Key">
+                        <i class="fa-solid fa-copy"></i>
+                    </button>
+                    <button type="button" class="btn-key-action delete" data-index="${idx}" title="Remove Key from Pool">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            `;
+            apiKeysList.appendChild(item);
+        });
+
+        // Bind item actions
+        apiKeysList.querySelectorAll('.toggle-eye').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const idx = parseInt(btn.dataset.index, 10);
+                if (revealedKeys.has(idx)) {
+                    revealedKeys.delete(idx);
+                } else {
+                    revealedKeys.add(idx);
+                }
+                renderApiKeysList();
+            });
+        });
+
+        apiKeysList.querySelectorAll('.copy-key').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const idx = parseInt(btn.dataset.index, 10);
+                if (activeApiKeys[idx]) {
+                    navigator.clipboard.writeText(activeApiKeys[idx]);
+                    showToast('📋 API Key copied to clipboard!');
+                }
+            });
+        });
+
+        apiKeysList.querySelectorAll('.delete').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const idx = parseInt(btn.dataset.index, 10);
+                activeApiKeys.splice(idx, 1);
+                revealedKeys.delete(idx);
+                renderApiKeysList();
+                showToast('🗑️ Key removed from pool');
+            });
+        });
+    }
+
+    function addKeyToPool(newKey) {
+        if (!newKey) return;
+        const parts = newKey.split(/[,;\n\r\s]+/).map(k => k.trim()).filter(Boolean);
+        let addedCount = 0;
+        parts.forEach(k => {
+            if (k && !activeApiKeys.includes(k)) {
+                activeApiKeys.push(k);
+                addedCount++;
+            }
+        });
+        renderApiKeysList();
+        if (addedCount > 0) {
+            showToast(`✨ Added ${addedCount} ${addedCount === 1 ? 'key' : 'keys'} to pool!`);
+        } else {
+            showToast('⚠️ Key already exists in pool');
+        }
+    }
+
+    if (btnAddApiKey && inputNewApiKey) {
+        btnAddApiKey.addEventListener('click', () => {
+            const val = inputNewApiKey.value.trim();
+            if (!val) {
+                showToast('⚠️ Please paste an API key first');
+                return;
+            }
+            addKeyToPool(val);
+            inputNewApiKey.value = '';
+        });
+
+        inputNewApiKey.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                btnAddApiKey.click();
+            }
+        });
+    }
+
+    if (btnToggleBulkKeys && bulkKeysBody) {
+        btnToggleBulkKeys.addEventListener('click', () => {
+            const isHidden = bulkKeysBody.style.display === 'none';
+            bulkKeysBody.style.display = isHidden ? 'flex' : 'none';
+            if (bulkChevron) {
+                bulkChevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+            }
+        });
+    }
+
+    if (btnApplyBulkKeys && inputBulkApiKeys) {
+        btnApplyBulkKeys.addEventListener('click', () => {
+            const text = inputBulkApiKeys.value.trim();
+            const keys = text.split(/[,;\n\r\s]+/).map(k => k.trim()).filter(Boolean);
+            activeApiKeys = Array.from(new Set(keys));
+            renderApiKeysList();
+            showToast(`✅ Pool updated with ${activeApiKeys.length} keys!`);
+            if (bulkKeysBody) {
+                bulkKeysBody.style.display = 'none';
+                if (bulkChevron) bulkChevron.style.transform = 'rotate(0deg)';
+            }
+        });
+    }
+
+    // Settings Modal Open
     btnOpenSettings.addEventListener('click', async () => {
         if (studioProMenu) studioProMenu.classList.remove('show');
         if (studioProContainer) studioProContainer.classList.remove('open');
@@ -781,10 +948,18 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch(`${API_BASE}/api/config`);
             const cfg = await res.json();
-            inputApiKey.value = cfg.gemini_api_key || '';
+            if (cfg.gemini_api_keys && Array.isArray(cfg.gemini_api_keys)) {
+                activeApiKeys = [...cfg.gemini_api_keys];
+            } else if (cfg.gemini_api_key) {
+                activeApiKeys = cfg.gemini_api_key.split(/[,;\n\r\s]+/).map(k => k.trim()).filter(Boolean);
+            } else {
+                activeApiKeys = [];
+            }
+            renderApiKeysList();
             settingsModal.classList.add('show');
             settingsModal.classList.add('active');
         } catch (err) {
+            renderApiKeysList();
             settingsModal.classList.add('show');
             settingsModal.classList.add('active');
         }
@@ -796,18 +971,24 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     btnSaveApiKey.addEventListener('click', async () => {
-        const key = inputApiKey.value.trim();
+        if (inputNewApiKey && inputNewApiKey.value.trim()) {
+            addKeyToPool(inputNewApiKey.value.trim());
+            inputNewApiKey.value = '';
+        }
         try {
             await fetch(`${API_BASE}/api/config`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ gemini_api_key: key })
+                body: JSON.stringify({
+                    gemini_api_keys: activeApiKeys,
+                    gemini_api_key: activeApiKeys.join(', ')
+                })
             });
-            showToast('✅ Gemini API Key connected & saved!');
+            showToast(`✅ ${activeApiKeys.length} Gemini API Keys saved into Auto-Rotating Pool!`);
             settingsModal.classList.remove('show');
             settingsModal.classList.remove('active');
         } catch (err) {
-            showToast('❌ Failed to save key');
+            showToast('❌ Failed to save keys pool');
         }
     });
 

@@ -1063,9 +1063,11 @@ class VideoSeparatorGUI:
 
         def save_k():
             new_k = key_entry.get().strip()
-            self.config["gemini_api_key"] = new_k
+            parsed = [k.strip() for k in re.split(r'[,;\n\r\s]+', new_k) if k.strip()]
+            self.config["gemini_api_keys"] = parsed
+            self.config["gemini_api_key"] = ", ".join(parsed)
             save_config(self.config)
-            messagebox.showinfo("Saved", "✅ Gemini API Key सुरक्षित भयो!", parent=win)
+            messagebox.showinfo("Saved", f"✅ {len(parsed)} वटा Gemini API Keys सुरक्षित भयो (Auto-Rotation Pool)!", parent=win)
             win.destroy()
 
         tk.Button(win, text="सुरक्षित गर्नुहोस् (Save Key)", font=("Segoe UI", 10, "bold"), bg="#059669", fg="#ffffff", padx=16, pady=6, relief="flat", cursor="hand2", command=save_k).pack(anchor="e", padx=20)

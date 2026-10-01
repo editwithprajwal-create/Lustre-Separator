@@ -76,12 +76,15 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_CONFIG = {
     "gemini_api_key": "AQ.Ab8RN6I11g79O6AH49StyV3bSH0BryNLxicJdzzT2YzT16GsDw",
+    "gemini_api_keys": [
+        "AQ.Ab8RN6I11g79O6AH49StyV3bSH0BryNLxicJdzzT2YzT16GsDw"
+    ],
     "target_platform": "facebook",
     "language": "english",
     "tone": "viral",
     "niche": "general",
     "upscale_4k": False,
-    "engine_mode": "local"
+    "engine_mode": "vision"
 }
 
 ACTIVE_MODELS = [
@@ -127,13 +130,26 @@ class GeminiKeyRotator:
         return len(self.keys)
 
 def load_config():
+    cfg = dict(DEFAULT_CONFIG)
     if CONFIG_FILE.exists():
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                return {**DEFAULT_CONFIG, **json.load(f)}
+                loaded = json.load(f)
+                cfg.update(loaded)
         except Exception:
             pass
-    return DEFAULT_CONFIG
+    # Normalize multi-key pool
+    if "gemini_api_keys" in cfg and isinstance(cfg["gemini_api_keys"], list):
+        cfg["gemini_api_keys"] = [k.strip() for k in cfg["gemini_api_keys"] if k and k.strip()]
+        if cfg["gemini_api_keys"] and not cfg.get("gemini_api_key"):
+            cfg["gemini_api_key"] = ", ".join(cfg["gemini_api_keys"])
+    elif cfg.get("gemini_api_key"):
+        parsed = parse_api_keys(cfg["gemini_api_key"])
+        cfg["gemini_api_keys"] = parsed
+        cfg["gemini_api_key"] = ", ".join(parsed)
+    else:
+        cfg["gemini_api_keys"] = []
+    return cfg
 
 def save_config(cfg):
     try:
@@ -814,8 +830,7 @@ def process_worker(file_rel_paths, platform, direct_mode=False, upscale_4k=False
     try:
         cfg = load_config()
         engine_mode = cfg.get("engine_mode", "local").lower()
-        raw_key = cfg.get("gemini_api_key", "").strip()
-
+        raw_key = cfg.get("gemini_api_keys") or cfg.get("gemini_api_key", "")
         rotator = GeminiKeyRotator(raw_key) if raw_key else None
         use_system_engine = (engine_mode == "local") or (not rotator or rotator.total_keys == 0)
 
@@ -1031,7 +1046,7 @@ def direct_process_worker(media_path, original_filename, platform, is_temp=False
     try:
         cfg = load_config()
         engine_mode = cfg.get("engine_mode", "local").lower()
-        raw_key = cfg.get("gemini_api_key", "").strip()
+        raw_key = cfg.get("gemini_api_keys") or cfg.get("gemini_api_key", "")
         rotator = GeminiKeyRotator(raw_key) if raw_key else None
         platform = cfg.get("target_platform", "facebook")
         use_system_engine = (engine_mode == "local") or (not rotator or rotator.total_keys == 0)
@@ -1435,8 +1450,18 @@ class LustreHTTPHandler(SimpleHTTPRequestHandler):
         elif path == "/api/config":
             cfg = load_config()
             cfg.update(data)
+            # Normalize and sync multi-key pool
+            if "gemini_api_keys" in data and isinstance(data["gemini_api_keys"], list):
+                clean_keys = [k.strip() for k in data["gemini_api_keys"] if k and k.strip()]
+                cfg["gemini_api_keys"] = clean_keys
+                cfg["gemini_api_key"] = ", ".join(clean_keys)
+            elif "gemini_api_key" in data:
+                raw_k = data["gemini_api_key"]
+                clean_keys = [k.strip() for k in re.split(r'[,;\n\r\s]+', str(raw_k)) if k.strip()]
+                cfg["gemini_api_keys"] = clean_keys
+                cfg["gemini_api_key"] = ", ".join(clean_keys)
             save_config(cfg)
-            self.send_json({"message": "Config saved", "config": cfg})
+            self.send_json({"message": "Config saved", "config": cfg, "keys_count": len(cfg.get("gemini_api_keys", []))})
 
         elif path == "/api/open_output":
             ok = open_directory_in_explorer(OUTPUT_DIR)

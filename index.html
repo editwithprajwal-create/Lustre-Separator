@@ -482,26 +482,65 @@
                 </button>
             </div>
 
-            <!-- Tab 1: API Key -->
+            <!-- Tab 1: Multi-API Key Manager -->
             <div class="settings-tab-pane active" id="paneSettingsApi">
                 <div class="modal-card-body">
-                    <label for="inputApiKey" class="input-label">Gemini API Key (Google AI Studio):</label>
-                    <div class="input-glow-wrapper">
-                        <i class="fa-solid fa-key input-icon"></i>
-                        <input type="password" id="inputApiKey" class="input-control" placeholder="AIzaSy... or AQ.Ab8RN...">
+                    <div class="keys-pool-header">
+                        <div class="keys-pool-title-group">
+                            <label class="input-label" style="margin:0;"><i class="fa-solid fa-key" style="color:#d4af37;"></i> Gemini API Keys Pool:</label>
+                            <span class="keys-pool-subtitle">Auto-rotates across keys to prevent 429 rate-limits</span>
+                        </div>
+                        <span class="badge-keys-active" id="badgeKeysActive">
+                            <i class="fa-solid fa-rotate"></i> <span id="keysCountLabel">0 Keys Active</span>
+                        </span>
                     </div>
+
+                    <!-- Add New Key Row -->
+                    <div class="add-key-container">
+                        <div class="input-glow-wrapper" style="flex:1;">
+                            <i class="fa-solid fa-plus input-icon"></i>
+                            <input type="text" id="inputNewApiKey" class="input-control" placeholder="Paste new Gemini API Key here (AQ.Ab8RN... or AIzaSy...)">
+                        </div>
+                        <button type="button" id="btnAddApiKey" class="btn-add-key">
+                            <i class="fa-solid fa-plus"></i> Add Key
+                        </button>
+                    </div>
+
+                    <!-- Active Keys Visual List -->
+                    <div class="api-keys-list-wrapper">
+                        <div class="api-keys-list" id="apiKeysList">
+                            <!-- Populated dynamically via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Bulk Import Accordion / Toggle -->
+                    <div class="bulk-keys-section">
+                        <div class="bulk-keys-header" id="btnToggleBulkKeys">
+                            <span><i class="fa-solid fa-paste"></i> Bulk Edit / Paste Multiple Keys</span>
+                            <i class="fa-solid fa-chevron-down bulk-chevron" id="bulkChevron"></i>
+                        </div>
+                        <div class="bulk-keys-body" id="bulkKeysBody" style="display: none;">
+                            <p class="bulk-help-text">Paste all your Gemini keys below (one key per line or separated by commas):</p>
+                            <textarea id="inputBulkApiKeys" class="input-control bulk-keys-textarea" rows="4" placeholder="AQ.Ab8RN...Key1&#10;AQ.Ab8RN...Key2&#10;AQ.Ab8RN...Key3"></textarea>
+                            <button type="button" id="btnApplyBulkKeys" class="btn-apply-bulk">
+                                <i class="fa-solid fa-check-double"></i> Update Pool from Text
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="modal-notice">
-                        <i class="fa-solid fa-shield-halved"></i>
-                        <span>Your key is stored securely in <code>config.json</code> and used strictly for video analysis via Google Gemini API.</span>
+                        <i class="fa-solid fa-bolt" style="color:#ffd700;"></i>
+                        <span><strong>Smart Multi-Key Auto-Rotation:</strong> Videos will rotate through all keys. If Key 1 reaches rate limit (429), it switches to Key 2, Key 3, etc. seamlessly.</span>
                     </div>
+
                     <p class="modal-link-row">
-                        Get your free key at: 
+                        Get free unlimited Gemini keys at: 
                         <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
                     </p>
                 </div>
                 <div class="modal-card-footer">
                     <button id="btnSaveApiKey" class="modal-save-btn">
-                        <i class="fa-solid fa-check"></i> Save &amp; Connect Key
+                        <i class="fa-solid fa-floppy-disk"></i> Save &amp; Apply All Keys
                     </button>
                 </div>
             </div>

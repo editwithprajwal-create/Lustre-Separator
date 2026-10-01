@@ -3030,3 +3030,233 @@ button:disabled {
         justify-content: flex-end;
     }
 }
+
+/* ==========================================================================
+   Multi-API Key Manager Styles
+   ========================================================================== */
+.keys-pool-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.keys-pool-title-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.keys-pool-subtitle {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.badge-keys-active {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(34, 197, 94, 0.15);
+    border: 1px solid rgba(34, 197, 94, 0.35);
+    color: #4ade80;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.3px;
+}
+
+.add-key-container {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.btn-add-key {
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.3), rgba(212, 175, 55, 0.15));
+    border: 1px solid rgba(212, 175, 55, 0.5);
+    color: #ffd700;
+    border-radius: var(--radius-md);
+    padding: 10px 16px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-add-key:hover {
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.45), rgba(212, 175, 55, 0.25));
+    border-color: #ffd700;
+    box-shadow: 0 0 14px rgba(212, 175, 55, 0.35);
+}
+
+.api-keys-list-wrapper {
+    background: rgba(10, 10, 14, 0.7);
+    border: 1px solid rgba(212, 175, 55, 0.2);
+    border-radius: var(--radius-md);
+    max-height: 180px;
+    overflow-y: auto;
+    padding: 6px;
+}
+
+.api-keys-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.api-key-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(22, 20, 16, 0.85);
+    border: 1px solid rgba(212, 175, 55, 0.15);
+    border-radius: var(--radius-sm);
+    padding: 7px 10px;
+    gap: 10px;
+    transition: all 0.15s ease;
+}
+
+.api-key-item:hover {
+    border-color: rgba(212, 175, 55, 0.4);
+    background: rgba(30, 26, 18, 0.95);
+}
+
+.key-item-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.key-index-badge {
+    background: rgba(212, 175, 55, 0.2);
+    color: #dfb76c;
+    border: 1px solid rgba(212, 175, 55, 0.4);
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    white-space: nowrap;
+}
+
+.key-text-preview {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #f1f5f9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    user-select: all;
+}
+
+.key-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-key-action {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-size: 11px;
+}
+
+.btn-key-action:hover {
+    color: #ffffff;
+    border-color: rgba(212, 175, 55, 0.5);
+    background: rgba(212, 175, 55, 0.15);
+}
+
+.btn-key-action.delete:hover {
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.5);
+    background: rgba(239, 68, 68, 0.15);
+}
+
+.keys-empty-placeholder {
+    padding: 16px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.bulk-keys-section {
+    border: 1px solid rgba(212, 175, 55, 0.2);
+    border-radius: var(--radius-sm);
+    background: rgba(14, 13, 10, 0.5);
+    overflow: hidden;
+}
+
+.bulk-keys-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #dfb76c;
+    cursor: pointer;
+    background: rgba(212, 175, 55, 0.08);
+    transition: background 0.15s ease;
+}
+
+.bulk-keys-header:hover {
+    background: rgba(212, 175, 55, 0.15);
+}
+
+.bulk-keys-body {
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.bulk-help-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.bulk-keys-textarea {
+    resize: vertical;
+    min-height: 80px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.4;
+    padding: 8px 10px;
+}
+
+.btn-apply-bulk {
+    align-self: flex-end;
+    background: rgba(212, 175, 55, 0.2);
+    border: 1px solid rgba(212, 175, 55, 0.4);
+    color: #ffd700;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-apply-bulk:hover {
+    background: rgba(212, 175, 55, 0.35);
+    border-color: #ffd700;
+}

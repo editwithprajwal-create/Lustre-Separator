@@ -1384,9 +1384,11 @@ class LustreSeparatorApp:
 
         def _save_key():
             k = key_entry.get().strip()
-            self.config["gemini_api_key"] = k
+            parsed = [p.strip() for p in re.split(r'[,;\n\r\s]+', k) if p.strip()]
+            self.config["gemini_api_keys"] = parsed
+            self.config["gemini_api_key"] = ", ".join(parsed)
             save_config(self.config)
-            messagebox.showinfo("Saved", "✅ Gemini API Key saved successfully!", parent=win)
+            messagebox.showinfo("Saved", f"✅ {len(parsed)} Gemini API Keys saved into Auto-Rotating Pool!", parent=win)
 
         btn_save = tk.Button(
             key_row,
