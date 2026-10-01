@@ -203,38 +203,45 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
             folder_len = 80
     else:
         folder_len = 80
-    safe_max_len = max(80, min(max_len, 240 - folder_len - len(ext) - 1))
-    max_len = safe_max_len
+    safe_max_len = max(60, min(max_len, 235 - folder_len - len(ext) - 1))
 
-    caption, hashtags = split_caption_and_hashtags(ai_text)
+    hashtags = re.findall(r'#[A-Za-z0-9_]+', ai_text)
+    caption_part = re.sub(r'#[A-Za-z0-9_]+', '', ai_text)
+    caption_part = re.sub(r'[\r\n\t]+', ' ', caption_part)
+    caption_part = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', caption_part)
+    caption_part = re.sub(r'\s+', ' ', caption_part).strip().rstrip('. ')
 
-    if not caption and not hashtags:
+    if not caption_part and not hashtags:
         base_name = fallback_stem
     elif not hashtags:
-        base_name = caption
-    elif not caption:
-        base_name = hashtags
+        base_name = caption_part[:safe_max_len].strip()
+    elif not caption_part:
+        base_name = " ".join(hashtags)[:safe_max_len].strip()
     else:
-        candidate = f"{caption}   {hashtags}"
-        if len(candidate) <= max_len:
-            base_name = candidate
-        else:
-            tag_part = hashtags.strip()
-            avail_caption = max_len - len(tag_part) - 3
-            if avail_caption >= 20:
-                truncated = caption[:avail_caption]
-                last_space = truncated.rfind(' ')
-                if last_space > 15:
-                    caption_part = truncated[:last_space].rstrip('. ')
-                else:
-                    caption_part = truncated.rstrip('. ')
-                base_name = f"{caption_part}   {tag_part}".strip()
-            else:
-                base_name = candidate[:max_len].rstrip('. ')
+        core_tags = [t for t in hashtags if t.lower() in ['#mustwatch', '#fyp', '#viral']]
+        other_tags = [t for t in hashtags if t not in core_tags]
+        ordered_tags = core_tags + other_tags
 
-    base_name = re.sub(r'[<>:"/\\|?*\x00-\x1f\u2028\u2029\r\n]', '', base_name).strip().rstrip('. ')
-    if len(base_name) > max_len:
-        base_name = base_name[:max_len].rstrip('. ')
+        allowed_caption_len = max(55, safe_max_len - 45)
+        if len(caption_part) > allowed_caption_len:
+            trimmed = caption_part[:allowed_caption_len]
+            last_sp = trimmed.rfind(' ')
+            caption_part = trimmed[:last_sp].rstrip('. ') if last_sp > 25 else trimmed.rstrip('. ')
+
+        fitted_tags = []
+        for tag in ordered_tags:
+            test_stem = f"{caption_part}   {' '.join(fitted_tags + [tag])}"
+            if len(test_stem) <= safe_max_len:
+                fitted_tags.append(tag)
+            else:
+                break
+
+        if fitted_tags:
+            base_name = f"{caption_part}   {' '.join(fitted_tags)}"
+        else:
+            base_name = caption_part
+
+    base_name = re.sub(r'[<>:"/\\|?*\x00-\x1f\r\n]', '', base_name).strip().rstrip('. ')
     if not base_name:
         base_name = fallback_stem
 
@@ -1247,6 +1254,15 @@ class VideoSeparatorGUI:
                             break
                         except Exception:
                             pass
+
+            # Save 100% identical matching .txt package right next to the video
+            try:
+                txt_file = target_media.with_suffix('.txt')
+                with open(txt_file, 'w', encoding='utf-8') as f:
+                    f.write(ai_output.strip() + '\n')
+                self.log(f"   📝 Full matching Caption & Hashtags saved: {txt_file.name}")
+            except Exception:
+                pass
 
             # Clean up empty parent folder inside input_media if it was inside a subfolder
             if media_path.parent != INPUT_DIR:
