@@ -251,9 +251,17 @@ def generate_video_filename(ai_text, ext, target_folder=None, fallback_stem="vid
     if not ext.startswith("."):
         ext = "." + ext
 
-    # 255 characters is Windows NTFS max filename limit.
-    # Leaving room for extension (.mp4 is 4 chars) and potential collision tag ' (1)' (4 chars):
-    max_stem_len = min(max_len, 255 - len(ext))
+    # Windows MAX_PATH is 260. VLC 32-bit fails if total path >= 256.
+    # Keep total absolute path strictly <= 240 characters to guarantee 100% VLC compatibility.
+    if target_folder:
+        try:
+            folder_len = len(str(Path(target_folder).resolve()))
+        except Exception:
+            folder_len = 75
+    else:
+        folder_len = 75
+
+    max_stem_len = max(60, min(160, 240 - folder_len - len(ext) - 1))
 
     # Split hashtags and caption
     hashtags = re.findall(r'#[A-Za-z0-9_]+', ai_text)
@@ -1027,19 +1035,10 @@ CRITICAL RULES:
                             except Exception:
                                 pass
 
-                # Save 100% identical matching .txt package right next to the video
-                try:
-                    txt_file = target_media.with_suffix('.txt')
-                    with open(txt_file, 'w', encoding='utf-8') as f:
-                        f.write(ai_output.strip() + '\n')
-                    state.add_log(f"   📝 Full matching Caption & Hashtags saved: {txt_file.name}")
-                except Exception as te:
-                    pass
-
                 state.latest_result = {
                     "folder": target_folder.name if target_folder else "output_media",
                     "video_file": renamed_filename,
-                    "txt_file": f"{target_media.stem}.txt",
+                    "txt_file": "",
                     "content": ai_output
                 }
 
